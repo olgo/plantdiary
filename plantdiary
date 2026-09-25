@@ -1,0 +1,76 @@
+server {
+    server_name plantdiary.olga-allerdings.de;
+
+    root /var/www/plantdiary;
+    index index.html;
+
+    auth_basic "Plantdiary";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # API-Proxy
+
+    location /images/ {
+        root /var/www/plantdiary;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    location /plants {
+    proxy_pass http://127.0.0.1:5000/api/plants;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-API-Key "REPLACE_WITH_API_KEY";
+    client_max_body_size 15m;
+	}
+
+    location /identify {
+        proxy_pass http://127.0.0.1:5000/api/identify;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-API-Key "REPLACE_WITH_API_KEY";
+        client_max_body_size 15m;
+    }
+
+    location /push/ {
+        proxy_pass http://127.0.0.1:5000/api/push/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-API-Key "REPLACE_WITH_API_KEY";
+    }
+
+    location /api/ {
+    auth_basic off;
+    proxy_pass https://open.plantbook.io/api/;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify off;
+    proxy_set_header Host open.plantbook.io;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header Authorization $http_authorization;
+    proxy_pass_header Authorization;
+}
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/plantdiary.olga-allerdings.de/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/plantdiary.olga-allerdings.de/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+
+server {
+    if ($host = plantdiary.olga-allerdings.de) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    server_name plantdiary.olga-allerdings.de;
+    return 404; # managed by Certbot
+
+
+}
+

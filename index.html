@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Olgos plantdiary</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f5f0e8; font-family: 'DM Sans', sans-serif; }
+
+    .app {
+      min-height: 100vh;
+      background: #f5f0e8;
+      background-image:
+        radial-gradient(ellipse at 20% 10%, #d4e8c2 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, #c8ddb0 0%, transparent 50%);
+    }
+
+    .header {
+      padding: 28px 24px 20px;
+      border-bottom: 1px solid #d6cdb8;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: rgba(245,240,232,0.85);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .header-leaf { font-size: 28px; }
+    .header-title { font-family: 'Lora', serif; font-size: 22px; color: #2d4a1e; font-weight: 600; }
+    .header-subtitle { font-size: 12px; color: #7a9060; margin-top: 1px; font-weight: 300; }
+    .header-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    .btn {
+      padding: 8px 16px; border-radius: 20px; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; transition: all 0.2s;
+    }
+    .btn-primary { background: #3d6b25; color: white; }
+    .btn-primary:hover { background: #2d4a1e; transform: translateY(-1px); }
+    .btn-ghost { background: transparent; color: #3d6b25; border: 1px solid #b5c9a0; }
+    .btn-ghost:hover { background: #e8f0d8; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+    /* Setup */
+    .setup-screen {
+      max-width: 480px; margin: 60px auto; padding: 40px;
+      background: white; border-radius: 20px;
+      box-shadow: 0 4px 40px rgba(61,107,37,0.1); border: 1px solid #dce8c8;
+    }
+    .setup-icon { font-size: 48px; text-align: center; margin-bottom: 16px; }
+    .setup-title { font-family: 'Lora', serif; font-size: 26px; color: #2d4a1e; text-align: center; margin-bottom: 8px; }
+    .setup-desc { color: #7a9060; text-align: center; font-size: 14px; line-height: 1.6; margin-bottom: 32px; }
+    .setup-hint {
+      background: #f0f7e6; border-radius: 10px; padding: 14px;
+      font-size: 12px; color: #5a7a40; line-height: 1.6; margin-bottom: 24px;
+    }
+    .setup-hint a { color: #3d6b25; font-weight: 500; }
+
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; font-size: 13px; font-weight: 500; color: #3d5a2a; margin-bottom: 6px; }
+    .form-input {
+      width: 100%; padding: 10px 14px; border: 1.5px solid #c8d8b0; border-radius: 10px;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; color: #2d4a1e;
+      background: #fafef6; transition: border-color 0.2s; outline: none;
+    }
+    .form-input:focus { border-color: #3d6b25; }
+
+    .error-box {
+      background: #fdf0ef; border: 1px solid #f5c0bb; border-radius: 10px;
+      padding: 12px 14px; font-size: 13px; color: #c0392b; margin-bottom: 16px;
+    }
+
+    /* Main */
+    .main { padding: 24px; max-width: 680px; margin: 0 auto; }
+
+    .status-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+    .stat-card {
+      background: white; border-radius: 14px; padding: 16px; text-align: center;
+      border: 1px solid #dce8c8; box-shadow: 0 2px 12px rgba(61,107,37,0.06);
+    }
+    .stat-num { font-family: 'Lora', serif; font-size: 28px; color: #2d4a1e; font-weight: 600; line-height: 1; }
+    .stat-label { font-size: 11px; color: #7a9060; margin-top: 4px; font-weight: 300; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .search-panel {
+      background: white; border-radius: 16px; padding: 20px; margin-bottom: 24px;
+      border: 1px solid #dce8c8; box-shadow: 0 2px 12px rgba(61,107,37,0.06);
+    }
+    .search-panel-title { font-family: 'Lora', serif; font-size: 16px; color: #2d4a1e; margin-bottom: 14px; }
+    .search-row { display: flex; gap: 10px; }
+    .search-results { margin-top: 14px; border-top: 1px solid #eef3e8; padding-top: 14px; }
+    .search-result-item {
+      display: flex; align-items: center; padding: 10px 12px; border-radius: 10px;
+      cursor: pointer; transition: background 0.15s; gap: 12px;
+    }
+    .search-result-item:hover { background: #f0f7e6; }
+    .result-name { font-size: 14px; font-weight: 500; color: #2d4a1e; }
+    .result-pid { font-size: 11px; color: #9aaf80; font-style: italic; }
+    .result-add {
+      margin-left: auto; padding: 4px 12px; border-radius: 12px;
+      border: 1.5px solid #3d6b25; background: transparent; color: #3d6b25;
+      font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 500; transition: all 0.15s;
+    }
+    .result-add:hover { background: #3d6b25; color: white; }
+    .result-add:disabled { opacity: 0.5; cursor: default; }
+
+    .section-title {
+      font-family: 'Lora', serif; font-size: 18px; color: #2d4a1e;
+      margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .plant-grid { display: flex; flex-direction: column; gap: 14px; }
+
+    .plant-card {
+      background: white; border-radius: 16px; padding: 18px 20px;
+      border: 1px solid #dce8c8; box-shadow: 0 2px 12px rgba(61,107,37,0.06);
+      transition: transform 0.2s, box-shadow 0.2s; animation: slideIn 0.3s ease;
+    }
+    .plant-card:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(61,107,37,0.12); }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .plant-card.urgent { border-left: 4px solid #e74c3c; }
+    .plant-card.soon   { border-left: 4px solid #f39c12; }
+    .plant-card.ok     { border-left: 4px solid #27ae60; }
+
+    .plant-card-top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+    .plant-icon { font-size: 32px; }
+    .plant-name { font-family: 'Lora', serif; font-size: 17px; color: #2d4a1e; font-weight: 600; }
+    .plant-scientific { font-size: 12px; color: #9aaf80; font-style: italic; margin-top: 2px; }
+    .plant-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+    .water-status { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .water-status.urgent { background: #fdf0ef; color: #c0392b; }
+    .water-status.soon   { background: #fef9ec; color: #d68910; }
+    .water-status.ok     { background: #eafaf1; color: #1e8449; }
+
+    .plant-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 14px; }
+    .meta-item { background: #f8fbf4; border-radius: 8px; padding: 8px 10px; }
+    .meta-key { font-size: 10px; color: #9aaf80; text-transform: uppercase; letter-spacing: 0.4px; }
+    .meta-val { font-size: 13px; color: #2d4a1e; font-weight: 500; margin-top: 2px; }
+
+    .watered-btn {
+      background: #3d6b25; color: white; border: none; padding: 7px 14px; border-radius: 20px;
+      font-size: 12px; font-family: 'DM Sans', sans-serif; font-weight: 500; cursor: pointer;
+      transition: all 0.2s; display: flex; align-items: center; gap: 5px;
+    }
+    .watered-btn:hover { background: #2d4a1e; }
+    .delete-btn {
+      background: transparent; border: none; cursor: pointer; color: #c8b8a0;
+      font-size: 16px; padding: 4px; border-radius: 6px; transition: color 0.2s;
+    }
+    .delete-btn:hover { color: #c0392b; }
+    .edit-btn {
+      background: transparent; border: none; cursor: pointer; color: #c8b8a0;
+      font-size: 15px; padding: 4px; border-radius: 6px; transition: color 0.2s;
+    }
+    .edit-btn:hover { color: #3d6b25; }
+
+    .empty-state { text-align: center; padding: 48px 24px; color: #9aaf80; }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-text { font-size: 15px; }
+
+    .loading { text-align: center; padding: 16px; color: #7a9060; font-size: 14px; }
+    .no-results { color: #9aaf80; font-size: 13px; padding: 8px 0; text-align: center; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(45,74,30,0.35);
+      backdrop-filter: blur(4px); display: flex; align-items: center;
+      justify-content: center; z-index: 100; padding: 24px;
+    }
+    .modal {
+      background: white; border-radius: 20px; padding: 28px;
+      max-width: 400px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .modal-title { font-family: 'Lora', serif; font-size: 20px; color: #2d4a1e; margin-bottom: 8px; }
+    .modal-sci { font-style: italic; color: #9aaf80; font-size: 13px; margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
+
+    /* Identify */
+    .identify-toggle-btn {
+      display: inline-flex; align-items: center; gap: 5px; margin-top: 10px;
+      font-size: 12px; color: #7a9060; cursor: pointer; transition: color 0.15s;
+    }
+    .identify-toggle-btn:hover { color: #3d6b25; }
+    .identify-hint {
+      margin-top: 8px; padding: 8px 12px; background: #f0f7e6;
+      border-radius: 8px; font-size: 12px; color: #5a7a40; line-height: 1.5;
+    }
+    .identify-result-card {
+      display: flex; align-items: center; padding: 10px 12px; border-radius: 10px;
+      cursor: pointer; transition: background 0.15s; gap: 12px;
+      margin-top: 6px; border: 1px solid #eef3e8;
+    }
+    .identify-result-card:hover { background: #f0f7e6; border-color: #b5c9a0; }
+    .identify-confidence {
+      margin-left: auto; font-size: 12px; font-weight: 600; color: white;
+      padding: 3px 8px; border-radius: 10px; white-space: nowrap;
+    }
+    .conf-high { background: #27ae60; }
+    .conf-mid  { background: #f39c12; }
+    .conf-low  { background: #e74c3c; }
+
+    /* Photos & Carousel */
+    .photo-section { margin-top: 14px; border-top: 1px solid #eef3e8; padding-top: 14px; }
+    .carousel { position: relative; border-radius: 10px; overflow: hidden; background: #eef3e8; }
+    .carousel-img { width: 100%; max-height: 280px; object-fit: cover; display: block; cursor: zoom-in; }
+    .carousel-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.85); border: none; border-radius: 50%;
+      width: 32px; height: 32px; font-size: 20px; line-height: 1; cursor: pointer; color: #3d6b25;
+      display: flex; align-items: center; justify-content: center; z-index: 2; transition: background 0.15s;
+    }
+    .carousel-nav:hover { background: white; }
+    .carousel-prev { left: 8px; }
+    .carousel-next { right: 8px; }
+    .carousel-delete {
+      position: absolute; top: 8px; right: 8px;
+      background: rgba(255,255,255,0.85); border: none; border-radius: 50%;
+      width: 28px; height: 28px; font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; z-index: 2; transition: background 0.15s;
+    }
+    .carousel-delete:hover { background: #fdf0ef; }
+    .carousel-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+    .carousel-caption { font-size: 11px; color: #9aaf80; }
+    .carousel-counter { font-size: 11px; color: #b5c9a0; }
+    .upload-btn {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+      padding: 6px 14px; border-radius: 16px; border: 1.5px dashed #b5c9a0;
+      color: #7a9060; font-size: 12px; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-weight: 500; transition: all 0.15s; background: transparent;
+    }
+    .upload-btn:hover { border-color: #3d6b25; color: #3d6b25; background: #f0f7e6; }
+
+    .hidden { display: none !important; }
+
+    /* Lightbox */
+    .lightbox {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; cursor: zoom-out; padding: 24px;
+    }
+    .lightbox-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.15); border: none; color: white;
+      font-size: 36px; width: 52px; height: 52px; border-radius: 50%;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .lightbox-nav:hover { background: rgba(255,255,255,0.3); }
+    .lightbox-prev { left: 16px; }
+    .lightbox-next { right: 16px; }
+    .lightbox-footer {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 20px; background: rgba(0,0,0,0.45);
+      color: rgba(255,255,255,0.85); font-size: 13px; pointer-events: none;
+      border-radius: 0 0 12px 12px;
+    }
+    .lightbox-counter { color: rgba(255,255,255,0.6); }
+    .lightbox img {
+      max-width: 100%; max-height: 90vh; border-radius: 12px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5); object-fit: contain;
+    }
+
+    @media (max-width: 480px) {
+      .main { padding: 16px; }
+      .status-bar { grid-template-columns: repeat(3,1fr); gap: 8px; }
+      .stat-num { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- SETUP SCREEN -->
+  <div class="main" id="setup-screen">
+    <div class="setup-screen">
+      <div class="setup-icon">🌿</div>
+      <h1 class="setup-title">Plantdiary</h1>
+      
+      <div class="error-box hidden" id="auth-error"></div>
+      <div class="form-group">
+        <label class="form-label">ID</label>
+        <input class="form-input" name="client-id" id="client-id" type="text" placeholder="deine-client-id" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">PW</label>
+        <input class="form-input" name="client-secret" id="client-secret" type="password" placeholder="••••••••••••" />
+      </div>
+      <button class="btn btn-primary" id="login-btn" style="width:100%;padding:12px" onclick="authenticate()">
+        Anmelden
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="main-app" class="hidden">
+    <div class="header">
+      <span class="header-leaf">🌿</span>
+      <div>
+        <div class="header-title">Plantdiary</div>
+        <div class="header-subtitle">Open Plantbook + Plantnet API</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-ghost btn-sm" id="push-btn" onclick="togglePush()" title="Benachrichtigungen" style="display:none">🔔</button>
+        <button class="btn btn-ghost btn-sm" onclick="logout()">Abmelden</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="status-bar">
+        <div class="stat-card">
+          <div class="stat-num" id="stat-urgent" style="color:#c0392b">0</div>
+          <div class="stat-label">Jetzt gießen</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="stat-soon" style="color:#d68910">0</div>
+          <div class="stat-label">Bald gießen</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="stat-ok" style="color:#1e8449">0</div>
+          <div class="stat-label">Gut versorgt</div>
+        </div>
+      </div>
+
+      <div class="search-panel">
+        <div class="search-panel-title">🔍 Pflanze suchen & hinzufügen</div>
+        <div class="search-row">
+          <input class="form-input" id="search-input" placeholder="z.B. Monstera, Basilikum, Aloe..."
+            style="flex:1" onkeydown="if(event.key==='Enter') searchPlants()" />
+          <button class="btn btn-primary" id="search-btn" onclick="searchPlants()">Suchen</button>
+        </div>
+        <div style="text-align:right;margin-top:4px">
+          <button class="btn btn-ghost btn-sm" onclick="openManualModal()">+ Manuell hinzufügen</button>
+        </div>
+        <div id="identify-hint" class="identify-hint hidden"></div>
+        <label class="identify-toggle-btn">
+          📷 oder per Foto identifizieren
+          <input type="file" accept="image/*" style="display:none" onchange="identifyFromPhoto(this)">
+        </label>
+        <div id="identify-loading" class="loading hidden">Wird identifiziert...</div>
+        <div id="identify-results" class="hidden"></div>
+        <div id="search-loading" class="loading hidden">Suche läuft...</div>
+        <div id="search-results" class="search-results hidden"></div>
+        <div id="no-results" class="no-results hidden">Keine Ergebnisse gefunden.</div>
+      </div>
+
+      <div class="section-title">
+        <span>🪴</span> Meine Pflanzen
+        <span id="plant-count" style="font-family:'DM Sans';font-size:14px;color:#9aaf80;font-weight:400">(0)</span>
+      </div>
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">🌱</div>
+        <div class="empty-text">Noch keine Pflanzen. Suche oben nach deinen Pflanzen!</div>
+      </div>
+      <div class="plant-grid" id="plant-grid"></div>
+    </div>
+  </div>
+
+  <!-- ADD MODAL -->
+  <div id="add-modal" class="modal-overlay hidden" onclick="closeModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div id="modal-emoji" style="font-size:36px;margin-bottom:10px"></div>
+      <div class="modal-title" id="modal-name"></div>
+      <div class="modal-sci" id="modal-pid"></div>
+      <div class="form-group">
+        <label class="form-label">Trivialname (optional)</label>
+        <input class="form-input" id="modal-custom-name" placeholder="z.B. Monstera im Wohnzimmer" />
+      </div>
+      <div class="form-group" id="modal-sci-group">
+        <label class="form-label">Wissenschaftlicher Name (optional)</label>
+        <input class="form-input" id="modal-scientific-name" placeholder="z.B. Monstera deliciosa" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Wie oft gießen? (Tage)</label>
+        <input class="form-input" id="modal-watering-days" type="number" min="1" max="60" value="7" />
+        <div style="font-size:11px;color:#9aaf80;margin-top:4px">
+          Empfehlung: Sukkulenten ~14 Tage, Tropenpflanzen ~5–7 Tage
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="document.getElementById('add-modal').classList.add('hidden')">Abbrechen</button>
+        <button class="btn btn-primary" onclick="confirmAdd()">Hinzufügen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGHTBOX -->
+  <div id="lightbox" class="lightbox hidden" onclick="closeLightbox(event)">
+    <button class="lightbox-nav lightbox-prev" id="lightbox-prev" onclick="event.stopPropagation();lightboxNav(-1)">&#8249;</button>
+    <img id="lightbox-img" src="" alt="" />
+    <button class="lightbox-nav lightbox-next" id="lightbox-next" onclick="event.stopPropagation();lightboxNav(1)">&#8250;</button>
+    <div class="lightbox-footer" id="lightbox-footer">
+      <span id="lightbox-caption"></span>
+      <span id="lightbox-counter"></span>
+    </div>
+  </div>
+
+  <!-- EDIT MODAL -->
+  <div id="edit-modal" class="modal-overlay hidden" onclick="closeEditModal(event)">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:460px;max-height:90vh;overflow-y:auto">
+      <div class="modal-title">✏️ Pflanze bearbeiten</div>
+      <div class="form-group">
+        <label class="form-label">Trivialname</label>
+        <input class="form-input" id="edit-name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Wissenschaftlicher Name</label>
+        <input class="form-input" id="edit-scientific-name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Gieß-Rhythmus (Tage)</label>
+        <input class="form-input" id="edit-watering-days" type="number" min="1" max="60" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Zuletzt gegossen</label>
+        <input class="form-input" id="edit-last-watered" type="datetime-local" />
+      </div>
+      <div style="font-size:12px;color:#9aaf80;margin:-14px 0 16px">Pflegedaten (von Open Plantbook)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Temp. min (°C)</label>
+          <input class="form-input" id="edit-min-temp" type="number" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Temp. max (°C)</label>
+          <input class="form-input" id="edit-max-temp" type="number" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Feuchte min (%)</label>
+          <input class="form-input" id="edit-min-moist" type="number" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Feuchte max (%)</label>
+          <input class="form-input" id="edit-max-moist" type="number" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Luftfeucht. min (%)</label>
+          <input class="form-input" id="edit-min-humidity" type="number" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Luftfeucht. max (%)</label>
+          <input class="form-input" id="edit-max-humidity" type="number" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Licht min (Lux)</label>
+          <input class="form-input" id="edit-min-light" type="number" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Licht max (Lux)</label>
+          <input class="form-input" id="edit-max-light" type="number" />
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn btn-ghost" onclick="document.getElementById('edit-modal').classList.add('hidden')">Abbrechen</button>
+        <button class="btn btn-primary" onclick="saveEdit()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const OPB_BASE = "/api/v1";
+  const BACKEND  = "/plants";
+  const PLANT_EMOJIS = ["🌿","🌱","🪴","🌺","🌸","🌻","🌵","🍃","🌴","🪻","🌾","🌷","🎋","🪷"];
+
+  let state = {
+    token: null,
+    tokenExpiry: 0,
+    plants: [],
+    pendingPlant: null,
+    credentials: { clientId: "", clientSecret: "" }
+  };
+
+  // ─── Storage helpers ───────────────────────────────────────────────────────
+  function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+  function load(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } }
+
+  // ─── Init ──────────────────────────────────────────────────────────────────
+  async function init() {
+    const creds = load("opb_credentials");
+    if (creds) state.credentials = creds;
+    const tok = load("opb_token");
+    if (tok) { state.token = tok.access_token; state.tokenExpiry = tok.expires_at || 0; }
+
+    if (state.token && state.tokenExpiry > Date.now() + 60000) {
+      await showApp();
+    } else {
+      document.getElementById("client-id").value = state.credentials.clientId || "";
+    }
+  }
+
+  // ─── Auth ──────────────────────────────────────────────────────────────────
+  async function authenticate() {
+    const clientId = document.getElementById("client-id").value.trim();
+    const clientSecret = document.getElementById("client-secret").value.trim();
+    if (!clientId || !clientSecret) return;
+
+    const btn = document.getElementById("login-btn");
+    btn.disabled = true; btn.textContent = "Verbinde...";
+    showError("");
+
+    try {
+      const resp = await fetch(`${OPB_BASE}/token/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret })
+      });
+      if (!resp.ok) throw new Error(`Authentifizierung fehlgeschlagen (${resp.status})`);
+      const data = await resp.json();
+      state.token = data.access_token;
+      state.tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+      state.credentials = { clientId, clientSecret };
+      save("opb_credentials", state.credentials);
+      save("opb_token", { access_token: state.token, expires_at: state.tokenExpiry });
+      await showApp();
+    } catch (e) {
+      showError(e.message || "Verbindungsfehler.");
+    }
+    btn.disabled = false; btn.textContent = "Anmelden";
+  }
+
+  async function getToken() {
+    if (state.token && state.tokenExpiry > Date.now() + 60000) return state.token;
+    try {
+      const resp = await fetch(`${OPB_BASE}/token/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "client_credentials", client_id: state.credentials.clientId, client_secret: state.credentials.clientSecret })
+      });
+      const data = await resp.json();
+      state.token = data.access_token;
+      state.tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+      save("opb_token", { access_token: state.token, expires_at: state.tokenExpiry });
+      return state.token;
+    } catch { return state.token; }
+  }
+
+  function logout() {
+    state.token = null;
+    localStorage.removeItem("opb_token");
+    document.getElementById("main-app").classList.add("hidden");
+    document.getElementById("setup-screen").classList.remove("hidden");
+  }
+
+  // ─── Backend API ───────────────────────────────────────────────────────────
+  async function loadPlantsFromServer() {
+    const resp = await fetch(BACKEND);
+    if (!resp.ok) throw new Error("Backend nicht erreichbar");
+    return await resp.json();
+  }
+
+  async function savePlantToServer(plant) {
+    const resp = await fetch(BACKEND, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(plant)
+    });
+    if (!resp.ok) throw new Error("Speichern fehlgeschlagen");
+    return await resp.json();
+  }
+
+  async function waterPlantOnServer(id) {
+    const resp = await fetch(`${BACKEND}/${id}/water`, { method: "PATCH" });
+    if (!resp.ok) throw new Error("Gießen fehlgeschlagen");
+    return await resp.json();
+  }
+
+  async function deletePlantFromServer(id) {
+    await fetch(`${BACKEND}/${id}`, { method: "DELETE" });
+  }
+
+  async function updatePlantOnServer(id, data) {
+    const resp = await fetch(`${BACKEND}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    if (!resp.ok) throw new Error("Speichern fehlgeschlagen");
+  }
+
+  // ─── UI helpers ────────────────────────────────────────────────────────────
+  function showError(msg) {
+    const el = document.getElementById("auth-error");
+    if (msg) { el.textContent = "⚠️ " + msg; el.classList.remove("hidden"); }
+    else el.classList.add("hidden");
+  }
+
+  async function showApp() {
+    document.getElementById("setup-screen").classList.add("hidden");
+    document.getElementById("main-app").classList.remove("hidden");
+    try {
+      state.plants = await loadPlantsFromServer();
+    } catch {
+      state.plants = [];
+    }
+    renderPlants();
+    initPush();
+  }
+
+  function getEmoji(pid) {
+    const idx = (pid || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) % PLANT_EMOJIS.length;
+    return PLANT_EMOJIS[idx];
+  }
+
+  function daysAgo(dateStr) {
+    if (!dateStr) return null;
+    return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  }
+
+  function getUrgency(plant) {
+    const days = daysAgo(plant.lastWatered);
+    const freq = plant.wateringDays || 7;
+    if (days === null) return "urgent";
+    if (days >= freq) return "urgent";
+    if (days >= freq * 0.7) return "soon";
+    return "ok";
+  }
+
+  function statusLabel(plant) {
+    const days = daysAgo(plant.lastWatered);
+    if (days === null) return "Noch nie gegossen";
+    if (days === 0) return "Heute gegossen ✓";
+    if (days === 1) return "Gestern gegossen";
+    return `Vor ${days} Tagen`;
+  }
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+  function renderPlants() {
+    const sorted = [...state.plants].sort((a, b) => {
+      const o = { urgent: 0, soon: 1, ok: 2 };
+      return o[getUrgency(a)] - o[getUrgency(b)];
+    });
+
+    document.getElementById("stat-urgent").textContent = state.plants.filter(p => getUrgency(p) === "urgent").length;
+    document.getElementById("stat-soon").textContent   = state.plants.filter(p => getUrgency(p) === "soon").length;
+    document.getElementById("stat-ok").textContent     = state.plants.filter(p => getUrgency(p) === "ok").length;
+    document.getElementById("plant-count").textContent = `(${state.plants.length})`;
+
+    const grid = document.getElementById("plant-grid");
+    const empty = document.getElementById("empty-state");
+
+    if (sorted.length === 0) { grid.innerHTML = ""; empty.classList.remove("hidden"); return; }
+    empty.classList.add("hidden");
+
+    grid.innerHTML = sorted.map(plant => {
+      const urgency = getUrgency(plant);
+      const d = plant.details || {};
+      const metaHtml = [
+        d.minTemp != null && d.maxTemp != null ? `<div class="meta-item"><div class="meta-key">Temperatur</div><div class="meta-val">${d.minTemp}–${d.maxTemp}°C</div></div>` : "",
+        d.minMoist != null && d.maxMoist != null ? `<div class="meta-item"><div class="meta-key">Bodenfeucht.</div><div class="meta-val">${d.minMoist}–${d.maxMoist}%</div></div>` : "",
+        d.minHumidity != null && d.maxHumidity != null ? `<div class="meta-item"><div class="meta-key">Luftfeucht.</div><div class="meta-val">${d.minHumidity}–${d.maxHumidity}%</div></div>` : "",
+        d.minLight != null ? `<div class="meta-item"><div class="meta-key">Licht</div><div class="meta-val">${Math.round(d.minLight/100)/10}k+ Lux</div></div>` : ""
+      ].join("");
+      const urgLabel = urgency === "urgent" ? "⚠️ Gießen!" : urgency === "soon" ? "💧 Bald" : "✓ Ok";
+
+      return `
+        <div class="plant-card ${urgency}">
+          <div class="plant-card-top">
+            <span class="plant-icon">${getEmoji(plant.pid)}</span>
+            <div style="flex:1">
+              <div class="plant-name">${escHtml(plant.name)}</div>
+              <div class="plant-scientific">${escHtml(plant.scientificName)}</div>
+              <div style="margin-top:6px;font-size:12px;color:#9aaf80">Gieß-Rhythmus: alle ${plant.wateringDays} Tage</div>
+            </div>
+            <div class="plant-actions"><span class="water-status ${urgency}">${urgLabel}</span></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div style="font-size:13px;color:#7a9060">${statusLabel(plant)}</div>
+            <div style="display:flex;gap:8px">
+              <button class="watered-btn" onclick="waterPlant('${plant.id}')">💧 Jetzt gegossen</button>
+              <button class="edit-btn" title="Bearbeiten" onclick="editPlant('${plant.id}')">✏️</button>
+              <button class="delete-btn" title="Entfernen" onclick="deletePlant('${plant.id}')">🗑</button>
+            </div>
+          </div>
+          ${metaHtml ? `<div class="plant-meta">${metaHtml}</div>` : ""}
+          <div class="photo-section" id="photos-${plant.id}"></div>
+        </div>`;
+    }).join("");
+    loadAllImages();
+  }
+
+  function escHtml(str) {
+    return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  // ─── Search ────────────────────────────────────────────────────────────────
+  async function searchPlants() {
+    const q = document.getElementById("search-input").value.trim();
+    if (!q) return;
+
+    const btn = document.getElementById("search-btn");
+    btn.disabled = true; btn.textContent = "...";
+    document.getElementById("search-loading").classList.remove("hidden");
+    document.getElementById("search-results").classList.add("hidden");
+    document.getElementById("no-results").classList.add("hidden");
+
+    try {
+      const tok = await getToken();
+      const resp = await fetch(`${OPB_BASE}/plant/search?alias=${encodeURIComponent(q)}&limit=8`, {
+        headers: { Authorization: `Bearer ${tok}` }
+      });
+      if (!resp.ok) throw new Error();
+      const data = await resp.json();
+      const results = data.results || data || [];
+
+      document.getElementById("search-loading").classList.add("hidden");
+
+      if (results.length === 0) {
+        document.getElementById("no-results").classList.remove("hidden");
+      } else {
+        const container = document.getElementById("search-results");
+        container.innerHTML = results.map((r, i) => {
+          const alreadyAdded = state.plants.some(p => p.pid === r.pid);
+          return `
+            <div class="search-result-item">
+              <div id="result-img-${i}" style="width:48px;height:48px;flex-shrink:0;border-radius:8px;overflow:hidden;background:#f0f7e6;display:flex;align-items:center;justify-content:center;font-size:22px">
+                ${getEmoji(r.pid)}
+              </div>
+              <div>
+                <div class="result-name">${escHtml(r.alias || r.display_pid || r.pid)}</div>
+                <div class="result-pid">PID: ${escHtml(r.pid)}</div>
+              </div>
+              <button class="result-add" ${alreadyAdded ? "disabled" : ""}
+                onclick="openAddModal('${escHtml(r.pid)}','${escHtml(r.alias || r.pid)}')">
+                ${alreadyAdded ? "✓ Vorhanden" : "+ Hinzufügen"}
+              </button>
+            </div>`;
+        }).join("");
+        container.classList.remove("hidden");
+
+        // Load images sequentially in background — no touch-event interference, no rate-limit burst
+        (async () => {
+          for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            const el = document.getElementById(`result-img-${i}`);
+            if (!el) continue;
+            try {
+              const t = await getToken();
+              const dr = await fetch(`${OPB_BASE}/plant/detail/${encodeURIComponent(r.pid)}`, {
+                headers: { Authorization: `Bearer ${t}` }
+              });
+              if (!dr.ok) continue;
+              const d = await dr.json();
+              if (!d.image_url) continue;
+              const img = document.createElement("img");
+              img.src = d.image_url;
+              img.style.cssText = "width:48px;height:48px;object-fit:cover";
+              el.innerHTML = "";
+              el.appendChild(img);
+            } catch {}
+          }
+        })();
+      }
+    } catch {
+      document.getElementById("search-loading").classList.add("hidden");
+      document.getElementById("no-results").classList.remove("hidden");
+    }
+
+    btn.disabled = false; btn.textContent = "Suchen";
+  }
+
+  // ─── Add modal ─────────────────────────────────────────────────────────────
+  function openManualModal() {
+    state.pendingPlant = { pid: null, alias: "", details: {} };
+    document.getElementById("modal-emoji").textContent    = "🌿";
+    document.getElementById("modal-name").textContent     = "Neue Pflanze";
+    document.getElementById("modal-pid").textContent      = "";
+    document.getElementById("modal-custom-name").value    = "";
+    document.getElementById("modal-scientific-name").value = "";
+    document.getElementById("modal-watering-days").value  = 7;
+    document.getElementById("add-modal").classList.remove("hidden");
+  }
+
+  async function openAddModal(pid, alias) {
+    state.pendingPlant = { pid, alias, details: {} };
+    document.getElementById("modal-emoji").textContent     = getEmoji(pid);
+    document.getElementById("modal-name").textContent      = alias;
+    document.getElementById("modal-pid").textContent       = pid;
+    document.getElementById("modal-custom-name").value     = alias;
+    document.getElementById("modal-scientific-name").value = pid;
+    document.getElementById("modal-watering-days").value   = 7;
+    document.getElementById("add-modal").classList.remove("hidden");
+
+    try {
+      const tok = await getToken();
+      const resp = await fetch(`${OPB_BASE}/plant/detail/${encodeURIComponent(pid)}`, {
+        headers: { Authorization: `Bearer ${tok}` }
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        state.pendingPlant.details = {
+          minTemp: d.min_temp, maxTemp: d.max_temp,
+          minLight: d.min_light_lux, maxLight: d.max_light_lux,
+          minMoist: d.min_soil_moist, maxMoist: d.max_soil_moist,
+          minHumidity: d.min_env_humid, maxHumidity: d.max_env_humid
+        };
+      }
+    } catch {}
+  }
+
+  function closeModal(event) {
+    if (event.target.id === "add-modal") document.getElementById("add-modal").classList.add("hidden");
+  }
+
+  async function confirmAdd() {
+    if (!state.pendingPlant) return;
+    const name = document.getElementById("modal-custom-name").value.trim() || state.pendingPlant.alias;
+    const wateringDays = parseInt(document.getElementById("modal-watering-days").value) || 7;
+    const scientificName = document.getElementById("modal-scientific-name").value.trim();
+    const plant = {
+      id: Date.now().toString(),
+      pid: state.pendingPlant.pid || "",
+      name,
+      scientificName: scientificName || state.pendingPlant.pid || "",
+      lastWatered: null,
+      wateringDays,
+      details: state.pendingPlant.details || {}
+    };
+
+    try {
+      await savePlantToServer(plant);
+      state.plants = await loadPlantsFromServer();
+    } catch {
+      state.plants = [...state.plants, plant];
+    }
+
+    document.getElementById("add-modal").classList.add("hidden");
+    document.getElementById("search-input").value = "";
+    document.getElementById("search-results").classList.add("hidden");
+    document.getElementById("no-results").classList.add("hidden");
+    state.pendingPlant = null;
+    renderPlants();
+  }
+
+  // ─── Actions ───────────────────────────────────────────────────────────────
+  async function waterPlant(id) {
+    try {
+      const result = await waterPlantOnServer(id);
+      state.plants = state.plants.map(p => p.id === id ? { ...p, lastWatered: result.lastWatered } : p);
+    } catch {
+      state.plants = state.plants.map(p => p.id === id ? { ...p, lastWatered: new Date().toISOString() } : p);
+    }
+    renderPlants();
+  }
+
+  async function deletePlant(id) {
+    if (!confirm("Pflanze wirklich entfernen?")) return;
+    try {
+      await deletePlantFromServer(id);
+      state.plants = state.plants.filter(p => p.id !== id);
+    } catch {
+      state.plants = state.plants.filter(p => p.id !== id);
+    }
+    renderPlants();
+  }
+
+  // ─── Lightbox ──────────────────────────────────────────────────────────────
+  let lightboxImages = [];
+  let lightboxIdx = 0;
+
+  function showLightbox(url) {
+    lightboxImages = [{ src: url, date: "" }];
+    lightboxIdx = 0;
+    _updateLightbox();
+  }
+
+  function showPlantLightbox(plantId, idx) {
+    const section = document.getElementById(`photos-${plantId}`);
+    const images = JSON.parse(section.dataset.images || "[]");
+    lightboxImages = images.map(i => ({
+      src: `/images/${i.filename}`,
+      date: new Date(i.uploaded_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })
+    }));
+    lightboxIdx = idx;
+    _updateLightbox();
+  }
+
+  function _updateLightbox() {
+    const item = lightboxImages[lightboxIdx];
+    const multi = lightboxImages.length > 1;
+    document.getElementById("lightbox-img").src = item.src;
+    document.getElementById("lightbox-prev").style.display = multi ? "" : "none";
+    document.getElementById("lightbox-next").style.display = multi ? "" : "none";
+    document.getElementById("lightbox-caption").textContent = item.date;
+    document.getElementById("lightbox-counter").textContent = multi ? `${lightboxIdx + 1} / ${lightboxImages.length}` : "";
+    document.getElementById("lightbox-footer").style.display = (item.date || multi) ? "" : "none";
+    document.getElementById("lightbox").classList.remove("hidden");
+  }
+
+  function lightboxNav(dir) {
+    lightboxIdx = (lightboxIdx + dir + lightboxImages.length) % lightboxImages.length;
+    _updateLightbox();
+  }
+
+  function closeLightbox(event) {
+    if (event.target === event.currentTarget || event.target.id === "lightbox-img") {
+      document.getElementById("lightbox").classList.add("hidden");
+    }
+  }
+
+  document.addEventListener("keydown", e => {
+    if (document.getElementById("lightbox").classList.contains("hidden")) return;
+    if (e.key === "ArrowLeft")  lightboxNav(-1);
+    if (e.key === "ArrowRight") lightboxNav(1);
+    if (e.key === "Escape") document.getElementById("lightbox").classList.add("hidden");
+  });
+
+  // ─── Edit ──────────────────────────────────────────────────────────────────
+  let editingPlantId = null;
+
+  function editPlant(id) {
+    const plant = state.plants.find(p => p.id === id);
+    if (!plant) return;
+    editingPlantId = id;
+    const d = plant.details || {};
+
+    document.getElementById("edit-name").value = plant.name || "";
+    document.getElementById("edit-scientific-name").value = plant.scientificName || "";
+    document.getElementById("edit-watering-days").value = plant.wateringDays || 7;
+    document.getElementById("edit-last-watered").value = plant.lastWatered
+      ? plant.lastWatered.substring(0, 16) : "";
+    document.getElementById("edit-min-temp").value   = d.minTemp  ?? "";
+    document.getElementById("edit-max-temp").value   = d.maxTemp  ?? "";
+    document.getElementById("edit-min-moist").value  = d.minMoist ?? "";
+    document.getElementById("edit-max-moist").value  = d.maxMoist ?? "";
+    document.getElementById("edit-min-humidity").value = d.minHumidity ?? "";
+    document.getElementById("edit-max-humidity").value = d.maxHumidity ?? "";
+    document.getElementById("edit-min-light").value    = d.minLight ?? "";
+    document.getElementById("edit-max-light").value    = d.maxLight ?? "";
+
+    document.getElementById("edit-modal").classList.remove("hidden");
+  }
+
+  async function saveEdit() {
+    if (!editingPlantId) return;
+    const plant = state.plants.find(p => p.id === editingPlantId);
+    if (!plant) return;
+
+    const lastWateredRaw = document.getElementById("edit-last-watered").value;
+    const num = s => { const v = parseFloat(s); return isNaN(v) ? null : v; };
+
+    const updated = {
+      name:           document.getElementById("edit-name").value.trim() || plant.name,
+      scientificName: document.getElementById("edit-scientific-name").value.trim(),
+      wateringDays:   parseInt(document.getElementById("edit-watering-days").value) || 7,
+      lastWatered:    lastWateredRaw ? lastWateredRaw + ":00.000Z" : plant.lastWatered,
+      details: {
+        minTemp:  num(document.getElementById("edit-min-temp").value),
+        maxTemp:  num(document.getElementById("edit-max-temp").value),
+        minMoist: num(document.getElementById("edit-min-moist").value),
+        maxMoist: num(document.getElementById("edit-max-moist").value),
+        minHumidity: num(document.getElementById("edit-min-humidity").value),
+        maxHumidity: num(document.getElementById("edit-max-humidity").value),
+        minLight: num(document.getElementById("edit-min-light").value),
+        maxLight: num(document.getElementById("edit-max-light").value)
+      }
+    };
+
+    const savedId = editingPlantId;
+
+    // Update local state immediately
+    const idx = state.plants.findIndex(p => p.id === savedId);
+    if (idx !== -1) state.plants[idx] = { ...state.plants[idx], ...updated };
+
+    document.getElementById("edit-modal").classList.add("hidden");
+    editingPlantId = null;
+    renderPlants();
+
+    // Persist to server (no state reload — local update is authoritative)
+    try { await updatePlantOnServer(savedId, updated); } catch {}
+  }
+
+  function closeEditModal(event) {
+    if (event.target.id === "edit-modal") {
+      document.getElementById("edit-modal").classList.add("hidden");
+      editingPlantId = null;
+    }
+  }
+
+  // ─── Identify ──────────────────────────────────────────────────────────────
+  async function identifyFromPhoto(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = "";
+
+    document.getElementById("identify-loading").classList.remove("hidden");
+    document.getElementById("identify-results").classList.add("hidden");
+    document.getElementById("identify-hint").classList.add("hidden");
+    document.getElementById("search-results").classList.add("hidden");
+    document.getElementById("no-results").classList.add("hidden");
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      const resp = await fetch("/identify", { method: "POST", body: formData });
+      const data = await resp.json();
+      document.getElementById("identify-loading").classList.add("hidden");
+
+      if (!resp.ok || !data.results || data.results.length === 0) {
+        document.getElementById("identify-results").innerHTML =
+          '<div class="no-results">Pflanze nicht erkannt. Bitte anderes Foto versuchen.</div>';
+        document.getElementById("identify-results").classList.remove("hidden");
+        return;
+      }
+
+      const container = document.getElementById("identify-results");
+      container.innerHTML =
+        '<div style="font-size:12px;color:#9aaf80;margin-bottom:4px">Bitte wähle die passende Art:</div>' +
+        data.results.map(r => {
+          const confClass = r.confidence >= 70 ? "conf-high" : r.confidence >= 40 ? "conf-mid" : "conf-low";
+          const thumb = r.imageUrl
+            ? `<img src="${escHtml(r.imageUrl)}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;cursor:zoom-in" loading="lazy" onclick="event.stopPropagation();showLightbox('${escHtml(r.imageFullUrl || r.imageUrl)}')">`
+            : `<span style="font-size:28px;flex-shrink:0">${getEmoji(r.scientificName)}</span>`;
+          return `
+            <div class="identify-result-card" onclick="selectIdentification('${escHtml(r.scientificName)}','${escHtml(r.commonName)}',${r.confidence})">
+              ${thumb}
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px;font-weight:500;color:#2d4a1e;font-style:italic">${escHtml(r.scientificName)}</div>
+                ${r.commonName ? `<div style="font-size:12px;color:#7a9060">${escHtml(r.commonName)}</div>` : ""}
+                ${r.imageAuthor ? `<div style="font-size:10px;color:#b5c9a0">© ${escHtml(r.imageAuthor)}</div>` : ""}
+              </div>
+              <span class="identify-confidence ${confClass}">${r.confidence}%</span>
+            </div>`;
+        }).join("");
+      container.classList.remove("hidden");
+    } catch {
+      document.getElementById("identify-loading").classList.add("hidden");
+      document.getElementById("identify-results").innerHTML =
+        '<div class="no-results">Identifikation fehlgeschlagen.</div>';
+      document.getElementById("identify-results").classList.remove("hidden");
+    }
+  }
+
+  function selectIdentification(scientificName, commonName, confidence) {
+    document.getElementById("search-input").value = scientificName;
+    document.getElementById("identify-results").classList.add("hidden");
+
+    const hint = document.getElementById("identify-hint");
+    hint.innerHTML = `🌿 <strong>${escHtml(commonName || scientificName)}</strong> · ${confidence}% Übereinstimmung`;
+    hint.classList.remove("hidden");
+
+    searchPlants();
+  }
+
+  // ─── Photos ────────────────────────────────────────────────────────────────
+  const carouselIdx = {};
+
+  async function loadAllImages() {
+    for (const plant of state.plants) {
+      const section = document.getElementById(`photos-${plant.id}`);
+      if (!section) continue;
+      try {
+        const resp = await fetch(`${BACKEND}/${plant.id}/images`);
+        if (!resp.ok) continue;
+        const images = await resp.json();
+        renderPhotoSection(plant.id, images);
+      } catch {}
+    }
+  }
+
+  function renderPhotoSection(plantId, images) {
+    const section = document.getElementById(`photos-${plantId}`);
+    if (!section) return;
+    if (carouselIdx[plantId] === undefined) carouselIdx[plantId] = 0;
+    const idx = Math.min(carouselIdx[plantId], Math.max(0, images.length - 1));
+    carouselIdx[plantId] = idx;
+
+    const uploadBtn = `<label class="upload-btn">📷 Foto hinzufügen<input type="file" accept="image/*" style="display:none" onchange="uploadImage('${plantId}', this)"></label>`;
+
+    if (images.length === 0) {
+      section.innerHTML = uploadBtn;
+      return;
+    }
+
+    const img = images[idx];
+    const date = new Date(img.uploaded_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const counter = images.length > 1 ? `<span class="carousel-counter">${idx + 1} / ${images.length}</span>` : "";
+    const prev = images.length > 1 ? `<button class="carousel-nav carousel-prev" onclick="carouselNav('${plantId}',-1)">‹</button>` : "";
+    const next = images.length > 1 ? `<button class="carousel-nav carousel-next" onclick="carouselNav('${plantId}',1)">›</button>` : "";
+
+    section.innerHTML = `
+      <div class="carousel">
+        ${prev}
+        <img class="carousel-img" src="/images/${img.filename}" alt="Pflanzenfoto" onclick="showPlantLightbox('${plantId}',${idx})">
+        ${next}
+        <button class="carousel-delete" onclick="deleteImage('${plantId}',${img.id})" title="Foto löschen">🗑</button>
+      </div>
+      <div class="carousel-footer">
+        <span class="carousel-caption">${date}</span>
+        ${counter}
+      </div>
+      ${uploadBtn}`;
+    section.dataset.images = JSON.stringify(images);
+  }
+
+  function carouselNav(plantId, dir) {
+    const section = document.getElementById(`photos-${plantId}`);
+    if (!section) return;
+    const images = JSON.parse(section.dataset.images || "[]");
+    carouselIdx[plantId] = ((carouselIdx[plantId] || 0) + dir + images.length) % images.length;
+    renderPhotoSection(plantId, images);
+  }
+
+  async function uploadImage(plantId, input) {
+    const file = input.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("image", file);
+    try {
+      const resp = await fetch(`${BACKEND}/${plantId}/images`, { method: "POST", body: formData });
+      if (!resp.ok) throw new Error();
+      const imagesResp = await fetch(`${BACKEND}/${plantId}/images`);
+      const images = await imagesResp.json();
+      carouselIdx[plantId] = images.length - 1;
+      renderPhotoSection(plantId, images);
+    } catch {
+      alert("Upload fehlgeschlagen.");
+    }
+  }
+
+  async function deleteImage(plantId, imageId) {
+    if (!confirm("Foto wirklich löschen?")) return;
+    try {
+      await fetch(`${BACKEND}/${plantId}/images/${imageId}`, { method: "DELETE" });
+      const resp = await fetch(`${BACKEND}/${plantId}/images`);
+      const images = await resp.json();
+      carouselIdx[plantId] = Math.max(0, Math.min(carouselIdx[plantId] || 0, images.length - 1));
+      renderPhotoSection(plantId, images);
+    } catch {}
+  }
+
+  // ─── Push notifications ────────────────────────────────────────────────────
+  async function initPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      const btn = document.getElementById('push-btn');
+      btn.style.display = '';
+      btn.textContent   = sub ? '🔕' : '🔔';
+      btn.title         = sub ? 'Benachrichtigungen deaktivieren' : 'Benachrichtigungen aktivieren';
+    } catch {}
+  }
+
+  async function togglePush() {
+    const btn = document.getElementById('push-btn');
+    btn.disabled = true;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+
+      if (existing) {
+        await existing.unsubscribe();
+        await fetch('/push/subscribe', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: existing.endpoint })
+        });
+        btn.textContent = '🔔';
+        btn.title = 'Benachrichtigungen aktivieren';
+      } else {
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') { btn.disabled = false; return; }
+
+        const keyResp = await fetch('/push/vapid-key');
+        if (!keyResp.ok) throw new Error(`/push/vapid-key: HTTP ${keyResp.status} — nginx-Konfiguration prüfen`);
+        const { publicKey } = await keyResp.json();
+        if (!publicKey) { btn.disabled = false; alert('VAPID_PUBLIC_KEY nicht konfiguriert — bitte /etc/plantdiary.env prüfen und Flask neu starten.'); return; }
+
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+        await fetch('/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sub.toJSON())
+        });
+        btn.textContent = '🔕';
+        btn.title = 'Benachrichtigungen deaktivieren';
+      }
+    } catch (e) {
+      console.error('Push toggle failed:', e);
+      alert('Benachrichtigungen konnten nicht aktiviert werden: ' + e.message);
+    }
+    btn.disabled = false;
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw     = atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  }
+
+  // ─── Boot ──────────────────────────────────────────────────────────────────
+  init();
+</script>
+</body>
+</html>

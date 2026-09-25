@@ -1,0 +1,14 @@
+[Unit]
+Description=Pflanzenpflege Backend
+After=network.target
+
+[Service]
+User=olgo
+EnvironmentFile=-/etc/plantdiary.env
+WorkingDirectory=/var/www/plantdiary
+ExecStart=/var/www/plantdiary/venv/bin/python app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

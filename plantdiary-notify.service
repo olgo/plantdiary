@@ -1,0 +1,11 @@
+[Unit]
+Description=Plantdiary daily watering reminder (push notification)
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/plantdiary
+ExecStart=/var/www/plantdiary/venv/bin/python /var/www/plantdiary/notify.py
+EnvironmentFile=/etc/plantdiary.env
+StandardOutput=journal
+StandardError=journal

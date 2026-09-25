@@ -1,0 +1,6 @@
+venv
+plants.db
+images/
+*.pem
+__pycache__/
+*.pyc
