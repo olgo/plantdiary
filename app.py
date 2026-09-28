@@ -5,6 +5,7 @@ import os
 import json
 import uuid
 import base64
+import time
 import requests as http
 import urllib.parse
 from google import genai
@@ -21,7 +22,7 @@ PLANTNET_API_KEY  = os.environ.get("PLANTNET_API_KEY", "")
 OPB_CLIENT_ID     = os.environ.get("OPB_CLIENT_ID", "")
 OPB_CLIENT_SECRET = os.environ.get("OPB_CLIENT_SECRET", "")
 GEMINI_API_KEY    = os.environ.get("GEMINI_API_KEY", "")
-CHAT_MODEL        = "gemini-3.8-flash"  # kostenlose Stufe (~20 Anfragen/Tag), siehe ai.google.dev
+CHAT_MODEL        = "gemini-3.5-flash-lite"  # kostenlose Stufe (~1500 Anfragen/Tag), siehe ai.google.dev
 VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_PEM = os.path.join(os.path.dirname(__file__), "vapid_private.pem")
 
@@ -612,6 +613,20 @@ def chat_system_prompt(plant):
     return "\n".join(lines)
 
 
+def generate_content_with_retry(client, **kwargs):
+    """Retry on transient server-side overload (e.g. 503 UNAVAILABLE /
+    'high demand') with a short backoff before giving up."""
+    last_error = None
+    for attempt in range(3):
+        try:
+            return client.models.generate_content(**kwargs)
+        except genai_errors.ServerError as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+    raise last_error
+
+
 def run_chat_tool(fc, plant_id, actions):
     """Execute one Gemini function call and return the function-response Part."""
     name = fc.name
@@ -755,8 +770,8 @@ def plant_chat(plant_id):
     try:
         response = None
         for _ in range(8):  # Sicherheitsgrenze gegen Endlos-Loops
-            response = client.models.generate_content(
-                model=CHAT_MODEL, contents=contents, config=config
+            response = generate_content_with_retry(
+                client, model=CHAT_MODEL, contents=contents, config=config
             )
             function_calls = response.function_calls
             if not function_calls:
