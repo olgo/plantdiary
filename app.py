@@ -59,10 +59,59 @@ def init_db():
                 created_at   TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS plant_waterings (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                plant_id   TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+                watered_at TEXT NOT NULL,
+                note       TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS plant_fertilizations (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                plant_id      TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+                fertilized_at TEXT NOT NULL,
+                note          TEXT
+            )
+        """)
+        conn.commit()
+
+
+def migrate_last_watered():
+    """One-time migration: move plants.last_watered into plant_waterings,
+    then drop the now-redundant column. Idempotent - no-ops once the
+    column is gone."""
+    with get_db() as conn:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(plants)").fetchall()]
+        if "last_watered" not in cols:
+            return
+
+        conn.execute("""
+            INSERT INTO plant_waterings (plant_id, watered_at, note)
+            SELECT id, last_watered, NULL FROM plants WHERE last_watered IS NOT NULL
+        """)
+        conn.execute("""
+            CREATE TABLE plants_new (
+                id TEXT PRIMARY KEY,
+                pid TEXT NOT NULL,
+                name TEXT NOT NULL,
+                scientific_name TEXT,
+                watering_days INTEGER DEFAULT 7,
+                details TEXT
+            )
+        """)
+        conn.execute("""
+            INSERT INTO plants_new (id, pid, name, scientific_name, watering_days, details)
+            SELECT id, pid, name, scientific_name, watering_days, details FROM plants
+        """)
+        conn.execute("DROP TABLE plants")
+        conn.execute("ALTER TABLE plants_new RENAME TO plants")
         conn.commit()
 
 
 init_db()
+migrate_last_watered()
 
 
 @app.before_request
@@ -77,13 +126,20 @@ def check_api_key():
 @app.route("/api/plants", methods=["GET"])
 def get_plants():
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM plants ORDER BY name").fetchall()
+        rows = conn.execute("""
+            SELECT p.*,
+                   (SELECT MAX(watered_at) FROM plant_waterings WHERE plant_id = p.id) AS last_watered,
+                   (SELECT MAX(fertilized_at) FROM plant_fertilizations WHERE plant_id = p.id) AS last_fertilized
+            FROM plants p
+            ORDER BY p.name
+        """).fetchall()
     plants = []
     for row in rows:
         plant = dict(row)
         plant["details"] = json.loads(plant["details"]) if plant["details"] else {}
         plant["wateringDays"] = plant.pop("watering_days")
         plant["lastWatered"] = plant.pop("last_watered")
+        plant["lastFertilized"] = plant.pop("last_fertilized")
         plant["scientificName"] = plant.pop("scientific_name")
         plants.append(plant)
     return jsonify(plants)
@@ -102,33 +158,51 @@ def create_plant():
     with get_db() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO plants
-               (id, pid, name, scientific_name, last_watered, watering_days, details)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (id, pid, name, scientific_name, watering_days, details)
+               VALUES (?, ?, ?, ?, ?, ?)""",
             (
                 plant_id,
                 data.get("pid", ""),
                 data.get("name", ""),
                 data.get("scientificName", ""),
-                data.get("lastWatered"),
                 data.get("wateringDays", 7),
                 details,
             ),
         )
+        if data.get("lastWatered"):
+            conn.execute(
+                "INSERT INTO plant_waterings (plant_id, watered_at, note) VALUES (?, ?, ?)",
+                (plant_id, data["lastWatered"], None)
+            )
         conn.commit()
 
     return jsonify({"id": plant_id}), 201
 
 
-# ── PATCH water plant ──────────────────────────────────────────────────────────
+# ── PATCH water plant (quick action) ────────────────────────────────────────────
 @app.route("/api/plants/<plant_id>/water", methods=["PATCH"])
 def water_plant(plant_id):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     with get_db() as conn:
         conn.execute(
-            "UPDATE plants SET last_watered = ? WHERE id = ?", (now, plant_id)
+            "INSERT INTO plant_waterings (plant_id, watered_at, note) VALUES (?, ?, ?)",
+            (plant_id, now, None)
         )
         conn.commit()
     return jsonify({"lastWatered": now})
+
+
+# ── PATCH fertilize plant (quick action) ────────────────────────────────────────
+@app.route("/api/plants/<plant_id>/fertilize", methods=["PATCH"])
+def fertilize_plant(plant_id):
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO plant_fertilizations (plant_id, fertilized_at, note) VALUES (?, ?, ?)",
+            (plant_id, now, None)
+        )
+        conn.commit()
+    return jsonify({"lastFertilized": now})
 
 
 # ── PATCH update plant ────────────────────────────────────────────────────────
@@ -140,17 +214,32 @@ def update_plant(plant_id):
     with get_db() as conn:
         conn.execute("""
             UPDATE plants SET
-                name = ?, scientific_name = ?, last_watered = ?,
+                name = ?, scientific_name = ?,
                 watering_days = ?, details = ?
             WHERE id = ?
         """, (
             data.get("name", ""),
             data.get("scientificName", ""),
-            data.get("lastWatered"),
             data.get("wateringDays", 7),
             json.dumps(data.get("details", {})),
             plant_id
         ))
+        if "lastWatered" in data:
+            latest = conn.execute(
+                "SELECT id FROM plant_waterings WHERE plant_id = ? ORDER BY watered_at DESC LIMIT 1",
+                (plant_id,)
+            ).fetchone()
+            if data["lastWatered"]:
+                if latest:
+                    conn.execute(
+                        "UPDATE plant_waterings SET watered_at = ? WHERE id = ?",
+                        (data["lastWatered"], latest["id"])
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO plant_waterings (plant_id, watered_at, note) VALUES (?, ?, ?)",
+                        (plant_id, data["lastWatered"], None)
+                    )
         conn.commit()
     return jsonify({"ok": True})
 
@@ -237,6 +326,92 @@ def delete_image(plant_id, image_id):
     filepath = os.path.join(IMAGES_DIR, row["filename"])
     if os.path.exists(filepath):
         os.remove(filepath)
+    return jsonify({"ok": True})
+
+
+# ── GET watering history for a plant ───────────────────────────────────────────
+@app.route("/api/plants/<plant_id>/waterings", methods=["GET"])
+def get_waterings(plant_id):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, watered_at, note FROM plant_waterings WHERE plant_id = ? ORDER BY watered_at DESC",
+            (plant_id,)
+        ).fetchall()
+    return jsonify([
+        {"id": r["id"], "wateredAt": r["watered_at"], "note": r["note"]} for r in rows
+    ])
+
+
+# ── POST add watering entry ─────────────────────────────────────────────────────
+@app.route("/api/plants/<plant_id>/waterings", methods=["POST"])
+def create_watering(plant_id):
+    data = request.get_json(silent=True) or {}
+    watered_at = data.get("wateredAt") or \
+        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO plant_waterings (plant_id, watered_at, note) VALUES (?, ?, ?)",
+            (plant_id, watered_at, data.get("note"))
+        )
+        conn.commit()
+    return jsonify({"id": cur.lastrowid, "wateredAt": watered_at, "note": data.get("note")}), 201
+
+
+# ── DELETE watering entry ───────────────────────────────────────────────────────
+@app.route("/api/plants/<plant_id>/waterings/<int:entry_id>", methods=["DELETE"])
+def delete_watering(plant_id, entry_id):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM plant_waterings WHERE id = ? AND plant_id = ?",
+            (entry_id, plant_id)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        conn.execute("DELETE FROM plant_waterings WHERE id = ?", (entry_id,))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+# ── GET fertilization history for a plant ──────────────────────────────────────
+@app.route("/api/plants/<plant_id>/fertilizations", methods=["GET"])
+def get_fertilizations(plant_id):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, fertilized_at, note FROM plant_fertilizations WHERE plant_id = ? ORDER BY fertilized_at DESC",
+            (plant_id,)
+        ).fetchall()
+    return jsonify([
+        {"id": r["id"], "fertilizedAt": r["fertilized_at"], "note": r["note"]} for r in rows
+    ])
+
+
+# ── POST add fertilization entry ────────────────────────────────────────────────
+@app.route("/api/plants/<plant_id>/fertilizations", methods=["POST"])
+def create_fertilization(plant_id):
+    data = request.get_json(silent=True) or {}
+    fertilized_at = data.get("fertilizedAt") or \
+        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO plant_fertilizations (plant_id, fertilized_at, note) VALUES (?, ?, ?)",
+            (plant_id, fertilized_at, data.get("note"))
+        )
+        conn.commit()
+    return jsonify({"id": cur.lastrowid, "fertilizedAt": fertilized_at, "note": data.get("note")}), 201
+
+
+# ── DELETE fertilization entry ──────────────────────────────────────────────────
+@app.route("/api/plants/<plant_id>/fertilizations/<int:entry_id>", methods=["DELETE"])
+def delete_fertilization(plant_id, entry_id):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM plant_fertilizations WHERE id = ? AND plant_id = ?",
+            (entry_id, plant_id)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        conn.execute("DELETE FROM plant_fertilizations WHERE id = ?", (entry_id,))
+        conn.commit()
     return jsonify({"ok": True})
 
 

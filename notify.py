@@ -23,7 +23,12 @@ def urgent_count():
     now = datetime.now(timezone.utc)
     count = 0
     with get_db() as conn:
-        for row in conn.execute("SELECT last_watered, watering_days FROM plants"):
+        rows = conn.execute("""
+            SELECT p.watering_days,
+                   (SELECT MAX(watered_at) FROM plant_waterings WHERE plant_id = p.id) AS last_watered
+            FROM plants p
+        """).fetchall()
+        for row in rows:
             days = row["watering_days"] or 7
             lw   = row["last_watered"]
             if not lw:
