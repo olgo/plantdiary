@@ -7,7 +7,9 @@ import uuid
 import base64
 import requests as http
 import urllib.parse
-import anthropic
+from google import genai
+from google.genai import types as genai_types
+from google.genai import errors as genai_errors
 from datetime import datetime, timezone
 from PIL import Image, ImageOps
 
@@ -18,19 +20,19 @@ API_KEY           = os.environ.get("API_KEY", "")
 PLANTNET_API_KEY  = os.environ.get("PLANTNET_API_KEY", "")
 OPB_CLIENT_ID     = os.environ.get("OPB_CLIENT_ID", "")
 OPB_CLIENT_SECRET = os.environ.get("OPB_CLIENT_SECRET", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-CHAT_MODEL        = "claude-sonnet-5"
+GEMINI_API_KEY    = os.environ.get("GEMINI_API_KEY", "")
+CHAT_MODEL        = "gemini-2.5-flash"  # kostenlose Stufe, siehe ai.google.dev
 VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_PEM = os.path.join(os.path.dirname(__file__), "vapid_private.pem")
 
-_anthropic_client = None
+_gemini_client = None
 
 
-def get_anthropic_client():
-    global _anthropic_client
-    if _anthropic_client is None:
-        _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    return _anthropic_client
+def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    return _gemini_client
 
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15 MB
 
@@ -538,50 +540,50 @@ def delete_note_sketch(plant_id):
     return jsonify({"ok": True, "updatedAt": updated_at})
 
 
-# ── Pflanzen-Chat (Tool-Use) ─────────────────────────────────────────────────────
-CHAT_TOOLS = [
-    {
-        "name": "set_watering_days",
-        "description": "Setzt den Gieß-Rhythmus (in Tagen) fuer diese Pflanze.",
-        "input_schema": {
+# ── Pflanzen-Chat (Tool-Use, Gemini) ─────────────────────────────────────────────
+CHAT_TOOLS = genai_types.Tool(function_declarations=[
+    genai_types.FunctionDeclaration(
+        name="set_watering_days",
+        description="Setzt den Gieß-Rhythmus (in Tagen) fuer diese Pflanze.",
+        parameters_json_schema={
             "type": "object",
             "properties": {
                 "days": {"type": "integer", "minimum": 1, "maximum": 60}
             },
             "required": ["days"]
         }
-    },
-    {
-        "name": "log_watering",
-        "description": "Traegt ein, dass die Pflanze jetzt gegossen wurde.",
-        "input_schema": {
+    ),
+    genai_types.FunctionDeclaration(
+        name="log_watering",
+        description="Traegt ein, dass die Pflanze jetzt gegossen wurde.",
+        parameters_json_schema={
             "type": "object",
             "properties": {
                 "note": {"type": "string", "description": "Optionale Notiz, z.B. Menge."}
             }
         }
-    },
-    {
-        "name": "log_fertilization",
-        "description": "Traegt ein, dass die Pflanze jetzt gedüngt wurde.",
-        "input_schema": {
+    ),
+    genai_types.FunctionDeclaration(
+        name="log_fertilization",
+        description="Traegt ein, dass die Pflanze jetzt gedüngt wurde.",
+        parameters_json_schema={
             "type": "object",
             "properties": {
                 "note": {"type": "string", "description": "Optionale Notiz, z.B. Duenger-Art."}
             }
         }
-    },
-    {
-        "name": "get_plant_photos",
-        "description": (
+    ),
+    genai_types.FunctionDeclaration(
+        name="get_plant_photos",
+        description=(
             "Ruft die zuletzt hochgeladenen Fotos dieser Pflanze ab (max. 3, neueste "
             "zuerst), um sie anzusehen - z.B. fuer eine Krankheits-/Schaedlings-Diagnose "
             "oder um den Verlauf zu vergleichen. Nur aufrufen, wenn die Frage das wirklich "
             "erfordert."
         ),
-        "input_schema": {"type": "object", "properties": {}}
-    }
-]
+        parameters_json_schema={"type": "object", "properties": {}}
+    ),
+])
 
 
 def chat_system_prompt(plant):
@@ -610,14 +612,20 @@ def chat_system_prompt(plant):
     return "\n".join(lines)
 
 
-def run_chat_tool(name, tool_input, plant_id, actions):
+def run_chat_tool(fc, plant_id, actions):
+    """Execute one Gemini function call and return the function-response Part."""
+    name = fc.name
+    tool_input = fc.args or {}
+
     with get_db() as conn:
         if name == "set_watering_days":
             days = max(1, min(60, int(tool_input.get("days", 7))))
             conn.execute("UPDATE plants SET watering_days = ? WHERE id = ?", (days, plant_id))
             conn.commit()
             actions.append(f"Gieß-Rhythmus auf {days} Tage geändert")
-            return f"Gieß-Rhythmus wurde auf {days} Tage gesetzt."
+            return genai_types.Part.from_function_response(
+                name=name, response={"result": f"Gieß-Rhythmus wurde auf {days} Tage gesetzt."}
+            )
 
         if name == "log_watering":
             now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -628,7 +636,9 @@ def run_chat_tool(name, tool_input, plant_id, actions):
             )
             conn.commit()
             actions.append("Gießen eingetragen")
-            return f"Gießen wurde eingetragen ({now})."
+            return genai_types.Part.from_function_response(
+                name=name, response={"result": f"Gießen wurde eingetragen ({now})."}
+            )
 
         if name == "log_fertilization":
             now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -639,7 +649,9 @@ def run_chat_tool(name, tool_input, plant_id, actions):
             )
             conn.commit()
             actions.append("Düngen eingetragen")
-            return f"Düngen wurde eingetragen ({now})."
+            return genai_types.Part.from_function_response(
+                name=name, response={"result": f"Düngen wurde eingetragen ({now})."}
+            )
 
         if name == "get_plant_photos":
             rows = conn.execute(
@@ -647,27 +659,59 @@ def run_chat_tool(name, tool_input, plant_id, actions):
                 (plant_id,)
             ).fetchall()
             if not rows:
-                return "Fuer diese Pflanze wurden noch keine Fotos hochgeladen."
-            result = [{"type": "text", "text": f"{len(rows)} Foto(s), neueste zuerst:"}]
+                return genai_types.Part.from_function_response(
+                    name=name,
+                    response={"result": "Fuer diese Pflanze wurden noch keine Fotos hochgeladen."}
+                )
+            response_parts = []
             for row in rows:
                 path = os.path.join(IMAGES_DIR, row["filename"])
                 try:
                     with open(path, "rb") as f:
-                        b64 = base64.standard_b64encode(f.read()).decode()
+                        data = f.read()
                 except OSError:
                     continue
-                result.append({
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}
-                })
-            return result
+                response_parts.append(
+                    genai_types.FunctionResponsePart.from_bytes(data=data, mime_type="image/jpeg")
+                )
+            return genai_types.Part.from_function_response(
+                name=name,
+                response={"result": f"{len(response_parts)} Foto(s), neueste zuerst."},
+                parts=response_parts or None
+            )
 
-    return f"Unbekanntes Tool: {name}"
+    return genai_types.Part.from_function_response(
+        name=name, response={"error": f"Unbekanntes Tool: {name}"}
+    )
+
+
+def build_gemini_contents(history):
+    """Convert our wire-format history (role: user/assistant, Anthropic-shaped
+    content blocks) into Gemini Content objects."""
+    contents = []
+    for turn in history:
+        role = "model" if turn.get("role") == "assistant" else "user"
+        parts = []
+        for block in turn.get("content") or []:
+            btype = block.get("type")
+            if btype == "text" and block.get("text"):
+                parts.append(genai_types.Part.from_text(text=block["text"]))
+            elif btype == "image":
+                source = block.get("source") or {}
+                data = source.get("data")
+                if data:
+                    parts.append(genai_types.Part.from_bytes(
+                        data=base64.standard_b64decode(data),
+                        mime_type=source.get("media_type", "image/jpeg")
+                    ))
+        if parts:
+            contents.append(genai_types.Content(role=role, parts=parts))
+    return contents
 
 
 @app.route("/api/plants/<plant_id>/chat", methods=["POST"])
 def plant_chat(plant_id):
-    if not ANTHROPIC_API_KEY:
+    if not GEMINI_API_KEY:
         return jsonify({"error": "Chat nicht konfiguriert"}), 503
 
     with get_db() as conn:
@@ -699,57 +743,48 @@ def plant_chat(plant_id):
     if not user_content:
         return jsonify({"error": "Keine Nachricht"}), 400
 
-    messages = history + [{"role": "user", "content": user_content}]
+    contents = build_gemini_contents(history + [{"role": "user", "content": user_content}])
     actions = []
-    client = get_anthropic_client()
-    system = chat_system_prompt(plant)
+    client = get_gemini_client()
+    config = genai_types.GenerateContentConfig(
+        system_instruction=chat_system_prompt(plant),
+        tools=[CHAT_TOOLS],
+        automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
+    )
 
     try:
         response = None
         for _ in range(8):  # Sicherheitsgrenze gegen Endlos-Loops
-            response = client.messages.create(
-                model=CHAT_MODEL,
-                max_tokens=4096,
-                system=system,
-                tools=CHAT_TOOLS,
-                messages=messages,
+            response = client.models.generate_content(
+                model=CHAT_MODEL, contents=contents, config=config
             )
-            messages.append({
-                "role": "assistant",
-                "content": [b.model_dump(mode="json") for b in response.content]
-            })
-
-            if response.stop_reason != "tool_use":
+            function_calls = response.function_calls
+            if not function_calls:
                 break
 
-            tool_results = []
-            for block in response.content:
-                if block.type != "tool_use":
-                    continue
-                try:
-                    result = run_chat_tool(block.name, block.input, plant_id, actions)
-                    tool_results.append({
-                        "type": "tool_result", "tool_use_id": block.id, "content": result
-                    })
-                except Exception as e:
-                    tool_results.append({
-                        "type": "tool_result", "tool_use_id": block.id,
-                        "content": f"Fehler: {e}", "is_error": True
-                    })
-            messages.append({"role": "user", "content": tool_results})
+            contents.append(response.candidates[0].content)
+            response_parts = [run_chat_tool(fc, plant_id, actions) for fc in function_calls]
+            contents.append(genai_types.Content(role="user", parts=response_parts))
         else:
             return jsonify({"error": "Zu viele Tool-Aufrufe in einer Antwort"}), 502
-    except anthropic.RateLimitError:
-        return jsonify({"error": "Rate Limit erreicht, bitte kurz warten"}), 429
-    except anthropic.APIStatusError as e:
-        app.logger.error(f"Anthropic API error: {e}")
+    except genai_errors.ClientError as e:
+        if e.code == 429:
+            return jsonify({"error": "Rate Limit erreicht, bitte kurz warten"}), 429
+        app.logger.error(f"Gemini API error: {e}")
         return jsonify({"error": "Chat-Anfrage fehlgeschlagen"}), 502
-    except anthropic.APIConnectionError as e:
-        app.logger.error(f"Anthropic connection error: {e}")
+    except genai_errors.APIError as e:
+        app.logger.error(f"Gemini API error: {e}")
+        return jsonify({"error": "Chat-Anfrage fehlgeschlagen"}), 502
+    except Exception as e:
+        app.logger.error(f"Gemini connection error: {e}")
         return jsonify({"error": "Chat nicht erreichbar"}), 502
 
-    reply_text = "".join(b.text for b in response.content if b.type == "text")
-    return jsonify({"reply": reply_text, "history": messages, "actions": actions})
+    reply_text = response.text or ""
+    updated_history = history + [
+        {"role": "user", "content": user_content},
+        {"role": "assistant", "content": [{"type": "text", "text": reply_text}]}
+    ]
+    return jsonify({"reply": reply_text, "history": updated_history, "actions": actions})
 
 
 # ── POST identify plant via PlantNet ──────────────────────────────────────────
