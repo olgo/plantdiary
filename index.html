@@ -174,6 +174,13 @@
     .chat-attach-btn { cursor: pointer; font-size: 20px; padding: 6px; flex-shrink: 0; }
     .chat-image-preview { margin-top: 8px; font-size: 12px; color: #7a9060; display: flex; align-items: center; gap: 6px; }
 
+    .note-canvas-toolbar { display: flex; align-items: center; margin: 14px 0 8px; gap: 8px; }
+    .note-save-status { font-size: 11px; color: #9aaf80; }
+    .note-canvas {
+      width: 100%; height: 320px; display: block; border-radius: 12px;
+      border: 1.5px solid #c8d8b0; background: #fafef6; touch-action: none; cursor: crosshair;
+    }
+
     .empty-state { text-align: center; padding: 48px 24px; color: #9aaf80; }
     .empty-icon { font-size: 48px; margin-bottom: 12px; }
     .empty-text { font-size: 15px; }
@@ -367,6 +374,7 @@
       <div class="tabs">
         <button class="tab-btn active" id="tab-btn-details" onclick="switchTab('details')">Details</button>
         <button class="tab-btn" id="tab-btn-chat" onclick="switchTab('chat')">Chat</button>
+        <button class="tab-btn" id="tab-btn-notes" onclick="switchTab('notes')">Notizen</button>
       </div>
 
       <div id="tab-details" class="tab-panel">
@@ -460,6 +468,20 @@
         </div>
         <div id="chat-image-preview" class="chat-image-preview hidden"></div>
       </div>
+
+      <div id="tab-notes" class="tab-panel hidden">
+        <textarea class="form-input" id="note-text" rows="4" style="min-height:100px;resize:vertical"
+          placeholder="Notiz eintippen – oder mit dem Apple Pencil direkt hier hineinschreiben, iPadOS wandelt das automatisch in Text um (Scribble)."
+          oninput="scheduleNoteTextSave()"></textarea>
+        <div class="note-canvas-toolbar">
+          <span id="note-save-status" class="note-save-status"></span>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="undoNoteStroke()">↩ Rückgängig</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearNoteSketch()">🗑 Löschen</button>
+          </div>
+        </div>
+        <canvas id="note-canvas" class="note-canvas"></canvas>
+      </div>
     </div>
   </div>
 
@@ -533,7 +555,8 @@
     currentPlantId: null,
     activeTab: "details",
     historyType: null,
-    chatHistoryByPlant: {}
+    chatHistoryByPlant: {},
+    currentNote: { text: "", filename: null, updatedAt: null }
   };
 
   // ─── Init ──────────────────────────────────────────────────────────────────
@@ -948,6 +971,7 @@
     document.getElementById("gallery-view").classList.add("hidden");
     document.getElementById("detail-view").classList.remove("hidden");
     loadDetailPhotos(id);
+    loadNote(id);
   }
 
   function closeDetail() {
@@ -960,9 +984,12 @@
     state.activeTab = tab;
     document.getElementById("tab-btn-details").classList.toggle("active", tab === "details");
     document.getElementById("tab-btn-chat").classList.toggle("active", tab === "chat");
+    document.getElementById("tab-btn-notes").classList.toggle("active", tab === "notes");
     document.getElementById("tab-details").classList.toggle("hidden", tab !== "details");
     document.getElementById("tab-chat").classList.toggle("hidden", tab !== "chat");
+    document.getElementById("tab-notes").classList.toggle("hidden", tab !== "notes");
     if (tab === "chat") renderChat();
+    if (tab === "notes") renderNotesTab();
   }
 
   // ─── Chat ───────────────────────────────────────────────────────────────────
@@ -1062,6 +1089,179 @@
       renderChat();
     }
     document.getElementById("chat-loading").classList.add("hidden");
+  }
+
+  // ─── Notizen (Text + Skizze) ────────────────────────────────────────────────
+  let noteCtx = null, noteCanvasEl = null, noteListenersAttached = false;
+  let noteStrokes = [], noteCurrentStroke = null, noteDrawing = false;
+  let noteBaseImage = null, noteInitializedFor = null;
+  let noteTextSaveTimer = null, noteSketchSaveTimer = null;
+
+  async function loadNote(plantId) {
+    try {
+      const resp = await fetch(`${BACKEND}/${plantId}/note`);
+      state.currentNote = await resp.json();
+    } catch {
+      state.currentNote = { text: "", filename: null, updatedAt: null };
+    }
+  }
+
+  function renderNotesTab() {
+    document.getElementById("note-text").value = state.currentNote.text || "";
+    setNoteSaveStatus("");
+    const plantId = state.currentPlantId;
+    if (noteInitializedFor === plantId) return;
+    noteInitializedFor = plantId;
+    noteStrokes = [];
+    initNoteCanvas();
+    if (state.currentNote.filename) {
+      const img = new Image();
+      img.onload = () => { noteBaseImage = img; redrawNoteCanvas(); };
+      img.src = `/images/${state.currentNote.filename}?t=${encodeURIComponent(state.currentNote.updatedAt || "")}`;
+    } else {
+      noteBaseImage = null;
+    }
+  }
+
+  function initNoteCanvas() {
+    const canvas = document.getElementById("note-canvas");
+    noteCanvasEl = canvas;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    noteCtx = canvas.getContext("2d");
+    noteCtx.scale(dpr, dpr);
+    noteCtx.lineCap = "round";
+    noteCtx.lineJoin = "round";
+    noteCtx.strokeStyle = "#2d4a1e";
+
+    if (!noteListenersAttached) {
+      canvas.addEventListener("pointerdown", onNotePointerDown);
+      canvas.addEventListener("pointermove", onNotePointerMove);
+      canvas.addEventListener("pointerup", onNotePointerUp);
+      canvas.addEventListener("pointerleave", onNotePointerUp);
+      noteListenersAttached = true;
+    }
+  }
+
+  function noteCanvasPos(e) {
+    const rect = noteCanvasEl.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top, pressure: e.pressure || 0.5 };
+  }
+
+  function onNotePointerDown(e) {
+    e.preventDefault();
+    noteDrawing = true;
+    noteCurrentStroke = [noteCanvasPos(e)];
+    try { noteCanvasEl.setPointerCapture(e.pointerId); } catch {}
+  }
+
+  function onNotePointerMove(e) {
+    if (!noteDrawing) return;
+    e.preventDefault();
+    const pos = noteCanvasPos(e);
+    const prev = noteCurrentStroke[noteCurrentStroke.length - 1];
+    noteCtx.lineWidth = Math.max(1.5, pos.pressure * 6);
+    noteCtx.beginPath();
+    noteCtx.moveTo(prev.x, prev.y);
+    noteCtx.lineTo(pos.x, pos.y);
+    noteCtx.stroke();
+    noteCurrentStroke.push(pos);
+  }
+
+  function onNotePointerUp(e) {
+    if (!noteDrawing) return;
+    noteDrawing = false;
+    if (noteCurrentStroke && noteCurrentStroke.length > 1) {
+      noteStrokes.push(noteCurrentStroke);
+      scheduleNoteSketchSave();
+    }
+    noteCurrentStroke = null;
+  }
+
+  function redrawNoteCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    noteCtx.clearRect(0, 0, noteCanvasEl.width / dpr, noteCanvasEl.height / dpr);
+    if (noteBaseImage) {
+      noteCtx.drawImage(noteBaseImage, 0, 0, noteCanvasEl.width / dpr, noteCanvasEl.height / dpr);
+    }
+    noteStrokes.forEach(stroke => {
+      for (let i = 1; i < stroke.length; i++) {
+        noteCtx.lineWidth = Math.max(1.5, stroke[i].pressure * 6);
+        noteCtx.beginPath();
+        noteCtx.moveTo(stroke[i - 1].x, stroke[i - 1].y);
+        noteCtx.lineTo(stroke[i].x, stroke[i].y);
+        noteCtx.stroke();
+      }
+    });
+  }
+
+  function undoNoteStroke() {
+    if (noteStrokes.length === 0) return;
+    noteStrokes.pop();
+    redrawNoteCanvas();
+    scheduleNoteSketchSave();
+  }
+
+  async function clearNoteSketch() {
+    noteStrokes = [];
+    noteBaseImage = null;
+    redrawNoteCanvas();
+    clearTimeout(noteSketchSaveTimer);
+    setNoteSaveStatus("speichert...");
+    try {
+      await fetch(`${BACKEND}/${state.currentPlantId}/note/sketch`, { method: "DELETE" });
+      setNoteSaveStatus("gespeichert");
+    } catch {
+      setNoteSaveStatus("Fehler beim Speichern");
+    }
+  }
+
+  function scheduleNoteSketchSave() {
+    setNoteSaveStatus("speichert...");
+    clearTimeout(noteSketchSaveTimer);
+    noteSketchSaveTimer = setTimeout(saveNoteSketch, 1200);
+  }
+
+  function saveNoteSketch() {
+    const plantId = state.currentPlantId;
+    noteCanvasEl.toBlob(async blob => {
+      if (!blob) return;
+      const formData = new FormData();
+      formData.append("image", blob, "sketch.png");
+      try {
+        await fetch(`${BACKEND}/${plantId}/note/sketch`, { method: "POST", body: formData });
+        setNoteSaveStatus("gespeichert");
+      } catch {
+        setNoteSaveStatus("Fehler beim Speichern");
+      }
+    }, "image/png");
+  }
+
+  function scheduleNoteTextSave() {
+    setNoteSaveStatus("speichert...");
+    clearTimeout(noteTextSaveTimer);
+    noteTextSaveTimer = setTimeout(saveNoteText, 800);
+  }
+
+  async function saveNoteText() {
+    const plantId = state.currentPlantId;
+    const text = document.getElementById("note-text").value;
+    try {
+      await fetch(`${BACKEND}/${plantId}/note`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      setNoteSaveStatus("gespeichert");
+    } catch {
+      setNoteSaveStatus("Fehler beim Speichern");
+    }
+  }
+
+  function setNoteSaveStatus(text) {
+    document.getElementById("note-save-status").textContent = text;
   }
 
   function formatDate(dateStr) {

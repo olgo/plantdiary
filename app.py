@@ -90,7 +90,37 @@ def init_db():
                 note          TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS plant_notes (
+                plant_id   TEXT PRIMARY KEY REFERENCES plants(id) ON DELETE CASCADE,
+                text       TEXT,
+                filename   TEXT,
+                updated_at TEXT
+            )
+        """)
         conn.commit()
+
+
+def upsert_note_field(conn, plant_id, **fields):
+    """Update the given columns of plant_notes for plant_id, inserting the
+    row first if it doesn't exist yet. Columns not passed are left untouched -
+    text and sketch are saved independently by the frontend's autosave."""
+    now = datetime.now(timezone.utc).isoformat()
+    cols = list(fields.keys())
+    set_clause = ", ".join(f"{c} = ?" for c in cols) + ", updated_at = ?"
+    cur = conn.execute(
+        f"UPDATE plant_notes SET {set_clause} WHERE plant_id = ?",
+        (*fields.values(), now, plant_id)
+    )
+    if cur.rowcount == 0:
+        insert_cols = ["plant_id"] + cols + ["updated_at"]
+        placeholders = ", ".join("?" for _ in insert_cols)
+        conn.execute(
+            f"INSERT INTO plant_notes ({', '.join(insert_cols)}) VALUES ({placeholders})",
+            (plant_id, *fields.values(), now)
+        )
+    conn.commit()
+    return now
 
 
 def migrate_last_watered():
@@ -455,6 +485,57 @@ def delete_fertilization(plant_id, entry_id):
         conn.execute("DELETE FROM plant_fertilizations WHERE id = ?", (entry_id,))
         conn.commit()
     return jsonify({"ok": True})
+
+
+# ── Notizen (Text + Skizze, ein Blatt pro Pflanze) ──────────────────────────────
+@app.route("/api/plants/<plant_id>/note", methods=["GET"])
+def get_note(plant_id):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT text, filename, updated_at FROM plant_notes WHERE plant_id = ?",
+            (plant_id,)
+        ).fetchone()
+    if not row:
+        return jsonify({"text": "", "filename": None, "updatedAt": None})
+    return jsonify({"text": row["text"] or "", "filename": row["filename"], "updatedAt": row["updated_at"]})
+
+
+@app.route("/api/plants/<plant_id>/note", methods=["PATCH"])
+def update_note_text(plant_id):
+    data = request.get_json(silent=True) or {}
+    with get_db() as conn:
+        updated_at = upsert_note_field(conn, plant_id, text=data.get("text", ""))
+    return jsonify({"ok": True, "updatedAt": updated_at})
+
+
+@app.route("/api/plants/<plant_id>/note/sketch", methods=["POST"])
+def upload_note_sketch(plant_id):
+    if "image" not in request.files:
+        return jsonify({"error": "No file"}), 400
+    file = request.files["image"]
+    if not file.content_type or not file.content_type.startswith("image/"):
+        return jsonify({"error": "Not an image"}), 400
+
+    filename = f"note_{plant_id}.png"
+    try:
+        img = Image.open(file.stream).convert("RGBA")
+        img.save(os.path.join(IMAGES_DIR, filename), "PNG")
+    except Exception:
+        return jsonify({"error": "Invalid image"}), 400
+
+    with get_db() as conn:
+        updated_at = upsert_note_field(conn, plant_id, filename=filename)
+    return jsonify({"filename": filename, "updatedAt": updated_at}), 201
+
+
+@app.route("/api/plants/<plant_id>/note/sketch", methods=["DELETE"])
+def delete_note_sketch(plant_id):
+    filepath = os.path.join(IMAGES_DIR, f"note_{plant_id}.png")
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    with get_db() as conn:
+        updated_at = upsert_note_field(conn, plant_id, filename=None)
+    return jsonify({"ok": True, "updatedAt": updated_at})
 
 
 # ── Pflanzen-Chat (Tool-Use) ─────────────────────────────────────────────────────
