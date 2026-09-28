@@ -174,6 +174,9 @@
     .chat-attach-btn { cursor: pointer; font-size: 20px; padding: 6px; flex-shrink: 0; }
     .chat-image-preview { margin-top: 8px; font-size: 12px; color: #7a9060; display: flex; align-items: center; gap: 6px; }
 
+    .note-page-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .note-page-counter { font-size: 12px; color: #7a9060; min-width: 76px; text-align: center; }
+    .note-page-nav button:disabled { opacity: 0.4; cursor: default; }
     .note-canvas-toolbar { display: flex; align-items: center; margin: 14px 0 8px; gap: 8px; }
     .note-save-status { font-size: 11px; color: #9aaf80; }
     .note-canvas {
@@ -470,6 +473,15 @@
       </div>
 
       <div id="tab-notes" class="tab-panel hidden">
+        <div class="note-page-nav">
+          <button class="btn btn-ghost btn-sm" onclick="notePageNav(-1)" id="note-page-prev">‹</button>
+          <span class="note-page-counter" id="note-page-counter">Seite 1/1</span>
+          <button class="btn btn-ghost btn-sm" onclick="notePageNav(1)" id="note-page-next">›</button>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="addNotePage()">+ Neues Blatt</button>
+            <button class="btn btn-ghost btn-sm" onclick="deleteNotePage()">🗑 Blatt löschen</button>
+          </div>
+        </div>
         <textarea class="form-input" id="note-text" rows="4" style="min-height:100px;resize:vertical"
           placeholder="Notiz eintippen – oder mit dem Apple Pencil direkt hier hineinschreiben, iPadOS wandelt das automatisch in Text um (Scribble)."
           oninput="scheduleNoteTextSave()"></textarea>
@@ -556,7 +568,8 @@
     activeTab: "details",
     historyType: null,
     chatHistoryByPlant: {},
-    currentNote: { text: "", filename: null, updatedAt: null }
+    notePages: [],
+    currentNotePageIndex: 0
   };
 
   // ─── Init ──────────────────────────────────────────────────────────────────
@@ -971,7 +984,7 @@
     document.getElementById("gallery-view").classList.add("hidden");
     document.getElementById("detail-view").classList.remove("hidden");
     loadDetailPhotos(id);
-    loadNote(id);
+    loadNotePages(id);
   }
 
   function closeDetail() {
@@ -1091,36 +1104,100 @@
     document.getElementById("chat-loading").classList.add("hidden");
   }
 
-  // ─── Notizen (Text + Skizze) ────────────────────────────────────────────────
+  // ─── Notizen (Text + Skizze, mehrseitige Notizblätter) ──────────────────────
   let noteCtx = null, noteCanvasEl = null, noteListenersAttached = false;
   let noteStrokes = [], noteCurrentStroke = null, noteDrawing = false;
   let noteBaseImage = null, noteInitializedFor = null;
   let noteTextSaveTimer = null, noteSketchSaveTimer = null;
 
-  async function loadNote(plantId) {
+  async function loadNotePages(plantId) {
+    state.notePages = [];
+    state.currentNotePageIndex = 0;
     try {
-      const resp = await fetch(`${BACKEND}/${plantId}/note`);
-      state.currentNote = await resp.json();
+      const resp = await fetch(`${BACKEND}/${plantId}/notes`);
+      state.notePages = await resp.json();
     } catch {
-      state.currentNote = { text: "", filename: null, updatedAt: null };
+      state.notePages = [];
+    }
+    if (state.notePages.length === 0) {
+      const page = await createNotePageOnServer(plantId);
+      if (page) state.notePages = [page];
     }
   }
 
+  async function createNotePageOnServer(plantId) {
+    try {
+      const resp = await fetch(`${BACKEND}/${plantId}/notes`, { method: "POST" });
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  function currentNotePage() {
+    return state.notePages[state.currentNotePageIndex] || null;
+  }
+
   function renderNotesTab() {
-    document.getElementById("note-text").value = state.currentNote.text || "";
+    const page = currentNotePage();
+    const total = state.notePages.length;
+    document.getElementById("note-page-counter").textContent =
+      `Seite ${total ? state.currentNotePageIndex + 1 : 0}/${total}`;
+    document.getElementById("note-page-prev").disabled = state.currentNotePageIndex <= 0;
+    document.getElementById("note-page-next").disabled = state.currentNotePageIndex >= total - 1;
+    document.getElementById("note-text").value = page ? (page.text || "") : "";
     setNoteSaveStatus("");
+
     const plantId = state.currentPlantId;
-    if (noteInitializedFor === plantId) return;
-    noteInitializedFor = plantId;
+    const key = `${plantId}:${page ? page.id : "none"}`;
+    if (noteInitializedFor === key) return;
+    noteInitializedFor = key;
     noteStrokes = [];
     initNoteCanvas();
-    if (state.currentNote.filename) {
+    if (page && page.filename) {
       const img = new Image();
       img.onload = () => { noteBaseImage = img; redrawNoteCanvas(); };
-      img.src = `/images/${state.currentNote.filename}?t=${encodeURIComponent(state.currentNote.updatedAt || "")}`;
+      img.src = `/images/${page.filename}?t=${encodeURIComponent(page.updatedAt || "")}`;
     } else {
       noteBaseImage = null;
+      redrawNoteCanvas();
     }
+  }
+
+  function notePageNav(dir) {
+    const newIndex = state.currentNotePageIndex + dir;
+    if (newIndex < 0 || newIndex >= state.notePages.length) return;
+    state.currentNotePageIndex = newIndex;
+    renderNotesTab();
+  }
+
+  async function addNotePage() {
+    const page = await createNotePageOnServer(state.currentPlantId);
+    if (!page) return;
+    state.notePages.push(page);
+    state.currentNotePageIndex = state.notePages.length - 1;
+    renderNotesTab();
+  }
+
+  async function deleteNotePage() {
+    const page = currentNotePage();
+    if (!page) return;
+    if (!confirm("Dieses Notizblatt wirklich löschen?")) return;
+    try {
+      await fetch(`${BACKEND}/${state.currentPlantId}/notes/${page.id}`, { method: "DELETE" });
+    } catch {
+      setNoteSaveStatus("Fehler beim Löschen");
+      return;
+    }
+    state.notePages.splice(state.currentNotePageIndex, 1);
+    if (state.notePages.length === 0) {
+      const fresh = await createNotePageOnServer(state.currentPlantId);
+      state.notePages = fresh ? [fresh] : [];
+      state.currentNotePageIndex = 0;
+    } else {
+      state.currentNotePageIndex = Math.min(state.currentNotePageIndex, state.notePages.length - 1);
+    }
+    renderNotesTab();
   }
 
   function initNoteCanvas() {
@@ -1205,13 +1282,16 @@
   }
 
   async function clearNoteSketch() {
+    const page = currentNotePage();
+    if (!page) return;
     noteStrokes = [];
     noteBaseImage = null;
     redrawNoteCanvas();
     clearTimeout(noteSketchSaveTimer);
     setNoteSaveStatus("speichert...");
     try {
-      await fetch(`${BACKEND}/${state.currentPlantId}/note/sketch`, { method: "DELETE" });
+      await fetch(`${BACKEND}/${state.currentPlantId}/notes/${page.id}/sketch`, { method: "DELETE" });
+      page.filename = null;
       setNoteSaveStatus("gespeichert");
     } catch {
       setNoteSaveStatus("Fehler beim Speichern");
@@ -1225,13 +1305,18 @@
   }
 
   function saveNoteSketch() {
+    const page = currentNotePage();
+    if (!page) return;
     const plantId = state.currentPlantId;
     noteCanvasEl.toBlob(async blob => {
       if (!blob) return;
       const formData = new FormData();
       formData.append("image", blob, "sketch.png");
       try {
-        await fetch(`${BACKEND}/${plantId}/note/sketch`, { method: "POST", body: formData });
+        const resp = await fetch(`${BACKEND}/${plantId}/notes/${page.id}/sketch`, { method: "POST", body: formData });
+        const data = await resp.json();
+        page.filename = data.filename;
+        page.updatedAt = data.updatedAt;
         setNoteSaveStatus("gespeichert");
       } catch {
         setNoteSaveStatus("Fehler beim Speichern");
@@ -1246,14 +1331,17 @@
   }
 
   async function saveNoteText() {
+    const page = currentNotePage();
+    if (!page) return;
     const plantId = state.currentPlantId;
     const text = document.getElementById("note-text").value;
     try {
-      await fetch(`${BACKEND}/${plantId}/note`, {
+      await fetch(`${BACKEND}/${plantId}/notes/${page.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text })
       });
+      page.text = text;
       setNoteSaveStatus("gespeichert");
     } catch {
       setNoteSaveStatus("Fehler beim Speichern");

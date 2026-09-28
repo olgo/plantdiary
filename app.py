@@ -94,36 +94,16 @@ def init_db():
             )
         """)
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS plant_notes (
-                plant_id   TEXT PRIMARY KEY REFERENCES plants(id) ON DELETE CASCADE,
+            CREATE TABLE IF NOT EXISTS plant_note_pages (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                plant_id   TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+                position   INTEGER NOT NULL,
                 text       TEXT,
                 filename   TEXT,
-                updated_at TEXT
+                updated_at TEXT NOT NULL
             )
         """)
         conn.commit()
-
-
-def upsert_note_field(conn, plant_id, **fields):
-    """Update the given columns of plant_notes for plant_id, inserting the
-    row first if it doesn't exist yet. Columns not passed are left untouched -
-    text and sketch are saved independently by the frontend's autosave."""
-    now = datetime.now(timezone.utc).isoformat()
-    cols = list(fields.keys())
-    set_clause = ", ".join(f"{c} = ?" for c in cols) + ", updated_at = ?"
-    cur = conn.execute(
-        f"UPDATE plant_notes SET {set_clause} WHERE plant_id = ?",
-        (*fields.values(), now, plant_id)
-    )
-    if cur.rowcount == 0:
-        insert_cols = ["plant_id"] + cols + ["updated_at"]
-        placeholders = ", ".join("?" for _ in insert_cols)
-        conn.execute(
-            f"INSERT INTO plant_notes ({', '.join(insert_cols)}) VALUES ({placeholders})",
-            (plant_id, *fields.values(), now)
-        )
-    conn.commit()
-    return now
 
 
 def migrate_last_watered():
@@ -158,8 +138,35 @@ def migrate_last_watered():
         conn.commit()
 
 
+def migrate_note_pages():
+    """One-time migration: move each plant's single-sheet plant_notes row
+    into plant_note_pages as its first page, then drop plant_notes.
+    Idempotent - no-ops once the old table is gone."""
+    with get_db() as conn:
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='plant_notes'"
+        ).fetchall()
+        if not tables:
+            return
+
+        rows = conn.execute("SELECT plant_id, text, filename, updated_at FROM plant_notes").fetchall()
+        for row in rows:
+            if not (row["text"] or row["filename"]):
+                continue
+            conn.execute("""
+                INSERT INTO plant_note_pages (plant_id, position, text, filename, updated_at)
+                VALUES (?, 0, ?, ?, ?)
+            """, (
+                row["plant_id"], row["text"] or "", row["filename"],
+                row["updated_at"] or datetime.now(timezone.utc).isoformat()
+            ))
+        conn.execute("DROP TABLE plant_notes")
+        conn.commit()
+
+
 init_db()
 migrate_last_watered()
+migrate_note_pages()
 
 
 @app.before_request
@@ -490,55 +497,121 @@ def delete_fertilization(plant_id, entry_id):
     return jsonify({"ok": True})
 
 
-# ── Notizen (Text + Skizze, ein Blatt pro Pflanze) ──────────────────────────────
-@app.route("/api/plants/<plant_id>/note", methods=["GET"])
-def get_note(plant_id):
+# ── Notizen (Text + Skizze, mehrseitige Notizblätter je Pflanze) ────────────────
+@app.route("/api/plants/<plant_id>/notes", methods=["GET"])
+def get_note_pages(plant_id):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, text, filename, updated_at FROM plant_note_pages "
+            "WHERE plant_id = ? ORDER BY position",
+            (plant_id,)
+        ).fetchall()
+    pages = [
+        {"id": r["id"], "text": r["text"] or "", "filename": r["filename"], "updatedAt": r["updated_at"]}
+        for r in rows
+    ]
+    return jsonify(pages)
+
+
+@app.route("/api/plants/<plant_id>/notes", methods=["POST"])
+def create_note_page(plant_id):
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        max_pos = conn.execute(
+            "SELECT MAX(position) AS m FROM plant_note_pages WHERE plant_id = ?",
+            (plant_id,)
+        ).fetchone()["m"]
+        position = 0 if max_pos is None else max_pos + 1
+        cur = conn.execute(
+            "INSERT INTO plant_note_pages (plant_id, position, text, filename, updated_at) "
+            "VALUES (?, ?, '', NULL, ?)",
+            (plant_id, position, now)
+        )
+        conn.commit()
+        page_id = cur.lastrowid
+    return jsonify({"id": page_id, "text": "", "filename": None, "updatedAt": now}), 201
+
+
+@app.route("/api/plants/<plant_id>/notes/<int:page_id>", methods=["PATCH"])
+def update_note_page_text(plant_id, page_id):
+    data = request.get_json(silent=True) or {}
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE plant_note_pages SET text = ?, updated_at = ? WHERE id = ? AND plant_id = ?",
+            (data.get("text", ""), now, page_id, plant_id)
+        )
+        conn.commit()
+    if cur.rowcount == 0:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"ok": True, "updatedAt": now})
+
+
+@app.route("/api/plants/<plant_id>/notes/<int:page_id>", methods=["DELETE"])
+def delete_note_page(plant_id, page_id):
     with get_db() as conn:
         row = conn.execute(
-            "SELECT text, filename, updated_at FROM plant_notes WHERE plant_id = ?",
-            (plant_id,)
+            "SELECT filename FROM plant_note_pages WHERE id = ? AND plant_id = ?",
+            (page_id, plant_id)
         ).fetchone()
-    if not row:
-        return jsonify({"text": "", "filename": None, "updatedAt": None})
-    return jsonify({"text": row["text"] or "", "filename": row["filename"], "updatedAt": row["updated_at"]})
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        if row["filename"]:
+            filepath = os.path.join(IMAGES_DIR, row["filename"])
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        conn.execute("DELETE FROM plant_note_pages WHERE id = ?", (page_id,))
+        conn.commit()
+    return jsonify({"ok": True})
 
 
-@app.route("/api/plants/<plant_id>/note", methods=["PATCH"])
-def update_note_text(plant_id):
-    data = request.get_json(silent=True) or {}
-    with get_db() as conn:
-        updated_at = upsert_note_field(conn, plant_id, text=data.get("text", ""))
-    return jsonify({"ok": True, "updatedAt": updated_at})
-
-
-@app.route("/api/plants/<plant_id>/note/sketch", methods=["POST"])
-def upload_note_sketch(plant_id):
+@app.route("/api/plants/<plant_id>/notes/<int:page_id>/sketch", methods=["POST"])
+def upload_note_page_sketch(plant_id, page_id):
     if "image" not in request.files:
         return jsonify({"error": "No file"}), 400
     file = request.files["image"]
     if not file.content_type or not file.content_type.startswith("image/"):
         return jsonify({"error": "Not an image"}), 400
 
-    filename = f"note_{plant_id}.png"
+    filename = f"note_{plant_id}_{page_id}.png"
     try:
         img = Image.open(file.stream).convert("RGBA")
         img.save(os.path.join(IMAGES_DIR, filename), "PNG")
     except Exception:
         return jsonify({"error": "Invalid image"}), 400
 
+    now = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
-        updated_at = upsert_note_field(conn, plant_id, filename=filename)
-    return jsonify({"filename": filename, "updatedAt": updated_at}), 201
+        cur = conn.execute(
+            "UPDATE plant_note_pages SET filename = ?, updated_at = ? WHERE id = ? AND plant_id = ?",
+            (filename, now, page_id, plant_id)
+        )
+        conn.commit()
+    if cur.rowcount == 0:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"filename": filename, "updatedAt": now}), 201
 
 
-@app.route("/api/plants/<plant_id>/note/sketch", methods=["DELETE"])
-def delete_note_sketch(plant_id):
-    filepath = os.path.join(IMAGES_DIR, f"note_{plant_id}.png")
-    if os.path.exists(filepath):
-        os.remove(filepath)
+@app.route("/api/plants/<plant_id>/notes/<int:page_id>/sketch", methods=["DELETE"])
+def delete_note_page_sketch(plant_id, page_id):
+    now = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
-        updated_at = upsert_note_field(conn, plant_id, filename=None)
-    return jsonify({"ok": True, "updatedAt": updated_at})
+        row = conn.execute(
+            "SELECT filename FROM plant_note_pages WHERE id = ? AND plant_id = ?",
+            (page_id, plant_id)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        if row["filename"]:
+            filepath = os.path.join(IMAGES_DIR, row["filename"])
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        conn.execute(
+            "UPDATE plant_note_pages SET filename = NULL, updated_at = ? WHERE id = ?",
+            (now, page_id)
+        )
+        conn.commit()
+    return jsonify({"ok": True, "updatedAt": now})
 
 
 # ── Pflanzen-Chat (Tool-Use, Gemini) ─────────────────────────────────────────────
