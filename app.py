@@ -4,8 +4,10 @@ import sqlite3
 import os
 import json
 import uuid
+import base64
 import requests as http
 import urllib.parse
+import anthropic
 from datetime import datetime, timezone
 from PIL import Image, ImageOps
 
@@ -16,8 +18,19 @@ API_KEY           = os.environ.get("API_KEY", "")
 PLANTNET_API_KEY  = os.environ.get("PLANTNET_API_KEY", "")
 OPB_CLIENT_ID     = os.environ.get("OPB_CLIENT_ID", "")
 OPB_CLIENT_SECRET = os.environ.get("OPB_CLIENT_SECRET", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+CHAT_MODEL        = "claude-sonnet-5"
 VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_PEM = os.path.join(os.path.dirname(__file__), "vapid_private.pem")
+
+_anthropic_client = None
+
+
+def get_anthropic_client():
+    global _anthropic_client
+    if _anthropic_client is None:
+        _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    return _anthropic_client
 
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15 MB
 
@@ -442,6 +455,220 @@ def delete_fertilization(plant_id, entry_id):
         conn.execute("DELETE FROM plant_fertilizations WHERE id = ?", (entry_id,))
         conn.commit()
     return jsonify({"ok": True})
+
+
+# ── Pflanzen-Chat (Tool-Use) ─────────────────────────────────────────────────────
+CHAT_TOOLS = [
+    {
+        "name": "set_watering_days",
+        "description": "Setzt den Gieß-Rhythmus (in Tagen) fuer diese Pflanze.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "minimum": 1, "maximum": 60}
+            },
+            "required": ["days"]
+        }
+    },
+    {
+        "name": "log_watering",
+        "description": "Traegt ein, dass die Pflanze jetzt gegossen wurde.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "note": {"type": "string", "description": "Optionale Notiz, z.B. Menge."}
+            }
+        }
+    },
+    {
+        "name": "log_fertilization",
+        "description": "Traegt ein, dass die Pflanze jetzt gedüngt wurde.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "note": {"type": "string", "description": "Optionale Notiz, z.B. Duenger-Art."}
+            }
+        }
+    },
+    {
+        "name": "get_plant_photos",
+        "description": (
+            "Ruft die zuletzt hochgeladenen Fotos dieser Pflanze ab (max. 3, neueste "
+            "zuerst), um sie anzusehen - z.B. fuer eine Krankheits-/Schaedlings-Diagnose "
+            "oder um den Verlauf zu vergleichen. Nur aufrufen, wenn die Frage das wirklich "
+            "erfordert."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    }
+]
+
+
+def chat_system_prompt(plant):
+    details = json.loads(plant["details"]) if plant["details"] else {}
+    lines = [
+        "Du bist ein hilfreicher Pflanzenpflege-Assistent in der App Plantdiary. "
+        "Antworte auf Deutsch, kurz und alltagstauglich.",
+        "Du beziehst dich ausschliesslich auf genau diese eine Pflanze:",
+        f"- Name: {plant['name']}",
+        f"- Wissenschaftlicher Name: {plant['scientific_name'] or 'unbekannt'}",
+        f"- Aktueller Gieß-Rhythmus: alle {plant['watering_days']} Tage",
+    ]
+    if details.get("minTemp") is not None:
+        lines.append(f"- Temperatur: {details.get('minTemp')}-{details.get('maxTemp')}°C")
+    if details.get("minMoist") is not None:
+        lines.append(f"- Bodenfeuchte: {details.get('minMoist')}-{details.get('maxMoist')}%")
+    if details.get("minHumidity") is not None:
+        lines.append(f"- Luftfeuchtigkeit: {details.get('minHumidity')}-{details.get('maxHumidity')}%")
+    if details.get("minLight") is not None:
+        lines.append(f"- Licht: ab {details.get('minLight')} Lux")
+    lines.append(
+        "Du kannst per Tool den Gieß-Rhythmus aendern und Gießen/Duengen eintragen - "
+        "fuehr klar gewuenschte Aktionen direkt aus, ohne unnoetig nachzufragen. Hol dir "
+        "bisherige Fotos nur per Tool, wenn es fuer die Antwort wirklich noetig ist."
+    )
+    return "\n".join(lines)
+
+
+def run_chat_tool(name, tool_input, plant_id, actions):
+    with get_db() as conn:
+        if name == "set_watering_days":
+            days = max(1, min(60, int(tool_input.get("days", 7))))
+            conn.execute("UPDATE plants SET watering_days = ? WHERE id = ?", (days, plant_id))
+            conn.commit()
+            actions.append(f"Gieß-Rhythmus auf {days} Tage geändert")
+            return f"Gieß-Rhythmus wurde auf {days} Tage gesetzt."
+
+        if name == "log_watering":
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            note = tool_input.get("note")
+            conn.execute(
+                "INSERT INTO plant_waterings (plant_id, watered_at, note) VALUES (?, ?, ?)",
+                (plant_id, now, note)
+            )
+            conn.commit()
+            actions.append("Gießen eingetragen")
+            return f"Gießen wurde eingetragen ({now})."
+
+        if name == "log_fertilization":
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            note = tool_input.get("note")
+            conn.execute(
+                "INSERT INTO plant_fertilizations (plant_id, fertilized_at, note) VALUES (?, ?, ?)",
+                (plant_id, now, note)
+            )
+            conn.commit()
+            actions.append("Düngen eingetragen")
+            return f"Düngen wurde eingetragen ({now})."
+
+        if name == "get_plant_photos":
+            rows = conn.execute(
+                "SELECT filename FROM plant_images WHERE plant_id = ? ORDER BY uploaded_at DESC LIMIT 3",
+                (plant_id,)
+            ).fetchall()
+            if not rows:
+                return "Fuer diese Pflanze wurden noch keine Fotos hochgeladen."
+            result = [{"type": "text", "text": f"{len(rows)} Foto(s), neueste zuerst:"}]
+            for row in rows:
+                path = os.path.join(IMAGES_DIR, row["filename"])
+                try:
+                    with open(path, "rb") as f:
+                        b64 = base64.standard_b64encode(f.read()).decode()
+                except OSError:
+                    continue
+                result.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}
+                })
+            return result
+
+    return f"Unbekanntes Tool: {name}"
+
+
+@app.route("/api/plants/<plant_id>/chat", methods=["POST"])
+def plant_chat(plant_id):
+    if not ANTHROPIC_API_KEY:
+        return jsonify({"error": "Chat nicht konfiguriert"}), 503
+
+    with get_db() as conn:
+        plant = conn.execute("SELECT * FROM plants WHERE id = ?", (plant_id,)).fetchone()
+    if not plant:
+        return jsonify({"error": "Pflanze nicht gefunden"}), 404
+
+    message = request.form.get("message", "").strip()
+    try:
+        history = json.loads(request.form.get("history", "[]"))
+        if not isinstance(history, list):
+            history = []
+    except (TypeError, ValueError):
+        history = []
+
+    image_file = request.files.get("image")
+    user_content = []
+    if image_file and image_file.content_type and image_file.content_type.startswith("image/"):
+        user_content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": image_file.content_type,
+                "data": base64.standard_b64encode(image_file.read()).decode()
+            }
+        })
+    if message:
+        user_content.append({"type": "text", "text": message})
+    if not user_content:
+        return jsonify({"error": "Keine Nachricht"}), 400
+
+    messages = history + [{"role": "user", "content": user_content}]
+    actions = []
+    client = get_anthropic_client()
+    system = chat_system_prompt(plant)
+
+    try:
+        response = None
+        for _ in range(8):  # Sicherheitsgrenze gegen Endlos-Loops
+            response = client.messages.create(
+                model=CHAT_MODEL,
+                max_tokens=4096,
+                system=system,
+                tools=CHAT_TOOLS,
+                messages=messages,
+            )
+            messages.append({
+                "role": "assistant",
+                "content": [b.model_dump(mode="json") for b in response.content]
+            })
+
+            if response.stop_reason != "tool_use":
+                break
+
+            tool_results = []
+            for block in response.content:
+                if block.type != "tool_use":
+                    continue
+                try:
+                    result = run_chat_tool(block.name, block.input, plant_id, actions)
+                    tool_results.append({
+                        "type": "tool_result", "tool_use_id": block.id, "content": result
+                    })
+                except Exception as e:
+                    tool_results.append({
+                        "type": "tool_result", "tool_use_id": block.id,
+                        "content": f"Fehler: {e}", "is_error": True
+                    })
+            messages.append({"role": "user", "content": tool_results})
+        else:
+            return jsonify({"error": "Zu viele Tool-Aufrufe in einer Antwort"}), 502
+    except anthropic.RateLimitError:
+        return jsonify({"error": "Rate Limit erreicht, bitte kurz warten"}), 429
+    except anthropic.APIStatusError as e:
+        app.logger.error(f"Anthropic API error: {e}")
+        return jsonify({"error": "Chat-Anfrage fehlgeschlagen"}), 502
+    except anthropic.APIConnectionError as e:
+        app.logger.error(f"Anthropic connection error: {e}")
+        return jsonify({"error": "Chat nicht erreichbar"}), 502
+
+    reply_text = "".join(b.text for b in response.content if b.type == "text")
+    return jsonify({"reply": reply_text, "history": messages, "actions": actions})
 
 
 # ── POST identify plant via PlantNet ──────────────────────────────────────────

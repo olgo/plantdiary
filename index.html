@@ -157,7 +157,16 @@
     .history-add-form .form-input { flex: 1; min-width: 130px; }
     .history-empty { color: #9aaf80; font-size: 13px; padding: 12px 0; text-align: center; }
 
-    .chat-placeholder { text-align: center; padding: 48px 24px; color: #9aaf80; font-size: 14px; }
+    .chat-empty { text-align: center; padding: 24px 0; color: #9aaf80; font-size: 13px; }
+    .chat-messages { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; max-height: 50vh; overflow-y: auto; padding-right: 4px; }
+    .chat-bubble { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+    .chat-bubble.user { align-self: flex-end; background: #3d6b25; color: white; border-bottom-right-radius: 4px; }
+    .chat-bubble.assistant { align-self: flex-start; background: #f0f7e6; color: #2d4a1e; border-bottom-left-radius: 4px; }
+    .chat-actions-note { align-self: flex-start; font-size: 11px; color: #1e8449; background: #eafaf1; padding: 4px 10px; border-radius: 10px; }
+    .chat-input-row { display: flex; gap: 8px; align-items: center; }
+    .chat-input-row .form-input { flex: 1; }
+    .chat-attach-btn { cursor: pointer; font-size: 20px; padding: 6px; flex-shrink: 0; }
+    .chat-image-preview { margin-top: 8px; font-size: 12px; color: #7a9060; display: flex; align-items: center; gap: 6px; }
 
     .empty-state { text-align: center; padding: 48px 24px; color: #9aaf80; }
     .empty-icon { font-size: 48px; margin-bottom: 12px; }
@@ -433,7 +442,17 @@
       </div>
 
       <div id="tab-chat" class="tab-panel hidden">
-        <div class="chat-placeholder">💬 Der Pflanzen-Chat kommt in einer der nächsten Phasen.</div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div id="chat-loading" class="loading hidden">Antwortet...</div>
+        <div class="chat-input-row">
+          <label class="chat-attach-btn" title="Foto anhängen">
+            📷<input type="file" accept="image/*" id="chat-image-input" style="display:none" onchange="updateChatImagePreview()">
+          </label>
+          <input class="form-input" id="chat-input" placeholder="Frag etwas zu dieser Pflanze..."
+            onkeydown="if(event.key==='Enter') sendChatMessage()">
+          <button class="btn btn-primary btn-sm" onclick="sendChatMessage()">Senden</button>
+        </div>
+        <div id="chat-image-preview" class="chat-image-preview hidden"></div>
       </div>
     </div>
   </div>
@@ -507,7 +526,8 @@
     pendingPlant: null,
     currentPlantId: null,
     activeTab: "details",
-    historyType: null
+    historyType: null,
+    chatHistoryByPlant: {}
   };
 
   // ─── Init ──────────────────────────────────────────────────────────────────
@@ -936,6 +956,106 @@
     document.getElementById("tab-btn-chat").classList.toggle("active", tab === "chat");
     document.getElementById("tab-details").classList.toggle("hidden", tab !== "details");
     document.getElementById("tab-chat").classList.toggle("hidden", tab !== "chat");
+    if (tab === "chat") renderChat();
+  }
+
+  // ─── Chat ───────────────────────────────────────────────────────────────────
+  function getChatHistory(plantId) {
+    if (!state.chatHistoryByPlant[plantId]) state.chatHistoryByPlant[plantId] = [];
+    return state.chatHistoryByPlant[plantId];
+  }
+
+  function renderChat() {
+    const history = getChatHistory(state.currentPlantId);
+    const container = document.getElementById("chat-messages");
+    if (history.length === 0) {
+      container.innerHTML = '<div class="chat-empty">Frag mich etwas zu dieser Pflanze – z.B. "Wie oft sollte ich gießen?" – oder schick ein Foto, wenn etwas komisch aussieht.</div>';
+      return;
+    }
+    container.innerHTML = history.map(renderChatTurn).filter(Boolean).join("");
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function renderChatTurn(turn) {
+    const blocks = Array.isArray(turn.content) ? turn.content : [{ type: "text", text: turn.content }];
+    if (turn.role === "user") {
+      const text = blocks.filter(b => b.type === "text").map(b => escHtml(b.text)).join(" ");
+      const hasImage = blocks.some(b => b.type === "image");
+      if (!text && !hasImage) return "";
+      return `<div class="chat-bubble user">${hasImage ? "📷 " : ""}${text}</div>`;
+    }
+    if (turn.role === "assistant") {
+      const text = blocks.filter(b => b.type === "text").map(b => b.text).join("");
+      if (!text.trim()) return "";
+      return `<div class="chat-bubble assistant">${escHtml(text)}</div>`;
+    }
+    return "";
+  }
+
+  let pendingChatImage = null;
+
+  function updateChatImagePreview() {
+    pendingChatImage = document.getElementById("chat-image-input").files[0] || null;
+    const preview = document.getElementById("chat-image-preview");
+    if (pendingChatImage) {
+      preview.innerHTML = `📎 ${escHtml(pendingChatImage.name)} <button class="delete-btn" onclick="clearChatImage()">✕</button>`;
+      preview.classList.remove("hidden");
+    } else {
+      preview.classList.add("hidden");
+    }
+  }
+
+  function clearChatImage() {
+    pendingChatImage = null;
+    document.getElementById("chat-image-input").value = "";
+    document.getElementById("chat-image-preview").classList.add("hidden");
+  }
+
+  async function sendChatMessage() {
+    const id = state.currentPlantId;
+    if (!id) return;
+    const input = document.getElementById("chat-input");
+    const message = input.value.trim();
+    if (!message && !pendingChatImage) return;
+
+    const history = getChatHistory(id);
+    const formData = new FormData();
+    formData.append("history", JSON.stringify(history));
+    formData.append("message", message);
+    if (pendingChatImage) formData.append("image", pendingChatImage);
+
+    input.value = "";
+    const hadImage = !!pendingChatImage;
+    clearChatImage();
+
+    const localContent = [];
+    if (hadImage) localContent.push({ type: "image" });
+    if (message) localContent.push({ type: "text", text: message });
+    history.push({ role: "user", content: localContent });
+    renderChat();
+
+    document.getElementById("chat-loading").classList.remove("hidden");
+    try {
+      const resp = await fetch(`${BACKEND}/${id}/chat`, { method: "POST", body: formData });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Chat fehlgeschlagen");
+
+      state.chatHistoryByPlant[id] = data.history;
+      renderChat();
+
+      if (data.actions && data.actions.length > 0) {
+        const container = document.getElementById("chat-messages");
+        container.innerHTML += data.actions.map(a => `<div class="chat-actions-note">✅ ${escHtml(a)}</div>`).join("");
+        container.scrollTop = container.scrollHeight;
+        await refreshCurrentPlantFromServer();
+        const plant = state.plants.find(p => p.id === id);
+        if (plant) document.getElementById("detail-watering-days").value = plant.wateringDays || 7;
+      }
+    } catch (e) {
+      history.push({ role: "assistant", content: [{ type: "text", text: "⚠️ " + (e.message || "Fehler beim Senden.") }] });
+      renderChat();
+    }
+    document.getElementById("chat-loading").classList.add("hidden");
   }
 
   function formatDate(dateStr) {
