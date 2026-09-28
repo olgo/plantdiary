@@ -12,9 +12,11 @@ from PIL import Image, ImageOps
 app = Flask(__name__)
 CORS(app, origins=["https://plantdiary.olga-allerdings.de"])
 
-API_KEY          = os.environ.get("API_KEY", "")
-PLANTNET_API_KEY = os.environ.get("PLANTNET_API_KEY", "")
-VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+API_KEY           = os.environ.get("API_KEY", "")
+PLANTNET_API_KEY  = os.environ.get("PLANTNET_API_KEY", "")
+OPB_CLIENT_ID     = os.environ.get("OPB_CLIENT_ID", "")
+OPB_CLIENT_SECRET = os.environ.get("OPB_CLIENT_SECRET", "")
+VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_PEM = os.path.join(os.path.dirname(__file__), "vapid_private.pem")
 
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15 MB
@@ -257,6 +259,33 @@ def delete_plant(plant_id):
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+# ── GET Open Plantbook access token ─────────────────────────────────────────────
+@app.route("/api/plants/opb-token", methods=["GET"])
+def opb_token():
+    if not OPB_CLIENT_ID or not OPB_CLIENT_SECRET:
+        return jsonify({"error": "Open Plantbook nicht konfiguriert"}), 503
+    try:
+        resp = http.post(
+            "https://open.plantbook.io/api/v1/token/",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": OPB_CLIENT_ID,
+                "client_secret": OPB_CLIENT_SECRET,
+            },
+            timeout=10
+        )
+    except http.RequestException as e:
+        app.logger.error(f"Open Plantbook token request failed: {e}")
+        return jsonify({"error": "Open Plantbook nicht erreichbar"}), 502
+    if not resp.ok:
+        return jsonify({"error": f"Open Plantbook Fehler ({resp.status_code})"}), 502
+    data = resp.json()
+    return jsonify({
+        "access_token": data.get("access_token"),
+        "expires_in": data.get("expires_in", 3600),
+    })
 
 
 # ── GET images for a plant ─────────────────────────────────────────────────────
