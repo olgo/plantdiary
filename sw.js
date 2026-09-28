@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plantdiary-shell-v1';
+const CACHE_NAME = 'plantdiary-shell-v2';
 const APP_SHELL = [
   '/',
   '/manifest.json',
