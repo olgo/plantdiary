@@ -21,7 +21,7 @@ PLANTNET_API_KEY  = os.environ.get("PLANTNET_API_KEY", "")
 OPB_CLIENT_ID     = os.environ.get("OPB_CLIENT_ID", "")
 OPB_CLIENT_SECRET = os.environ.get("OPB_CLIENT_SECRET", "")
 GEMINI_API_KEY    = os.environ.get("GEMINI_API_KEY", "")
-CHAT_MODEL        = "gemini-2.5-flash"  # kostenlose Stufe, siehe ai.google.dev
+CHAT_MODEL        = "gemini-3.8-flash"  # kostenlose Stufe (~20 Anfragen/Tag), siehe ai.google.dev
 VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_PEM = os.path.join(os.path.dirname(__file__), "vapid_private.pem")
 
