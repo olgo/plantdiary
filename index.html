@@ -92,51 +92,72 @@
       font-family: 'Lora', serif; font-size: 18px; color: #2d4a1e;
       margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
     }
-    .plant-grid { display: flex; flex-direction: column; gap: 14px; }
 
-    .plant-card {
-      background: white; border-radius: 16px; padding: 18px 20px;
+    /* Gallery */
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+    .gallery-tile {
+      position: relative; background: white; border-radius: 16px; overflow: hidden;
       border: 1px solid #dce8c8; box-shadow: 0 2px 12px rgba(61,107,37,0.06);
-      transition: transform 0.2s, box-shadow 0.2s; animation: slideIn 0.3s ease;
+      cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; animation: slideIn 0.3s ease;
+      border-top: 4px solid transparent;
     }
-    .plant-card:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(61,107,37,0.12); }
+    .gallery-tile:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(61,107,37,0.12); }
     @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .plant-card.urgent { border-left: 4px solid #e74c3c; }
-    .plant-card.soon   { border-left: 4px solid #f39c12; }
-    .plant-card.ok     { border-left: 4px solid #27ae60; }
+    .gallery-tile.urgent { border-top-color: #e74c3c; }
+    .gallery-tile.soon   { border-top-color: #f39c12; }
+    .gallery-tile.ok     { border-top-color: #27ae60; }
 
-    .plant-card-top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
-    .plant-icon { font-size: 32px; }
-    .plant-name { font-family: 'Lora', serif; font-size: 17px; color: #2d4a1e; font-weight: 600; }
-    .plant-scientific { font-size: 12px; color: #9aaf80; font-style: italic; margin-top: 2px; }
-    .plant-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-
-    .water-status { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
-    .water-status.urgent { background: #fdf0ef; color: #c0392b; }
-    .water-status.soon   { background: #fef9ec; color: #d68910; }
-    .water-status.ok     { background: #eafaf1; color: #1e8449; }
-
-    .plant-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 14px; }
-    .meta-item { background: #f8fbf4; border-radius: 8px; padding: 8px 10px; }
-    .meta-key { font-size: 10px; color: #9aaf80; text-transform: uppercase; letter-spacing: 0.4px; }
-    .meta-val { font-size: 13px; color: #2d4a1e; font-weight: 500; margin-top: 2px; }
-
-    .watered-btn {
-      background: #3d6b25; color: white; border: none; padding: 7px 14px; border-radius: 20px;
-      font-size: 12px; font-family: 'DM Sans', sans-serif; font-weight: 500; cursor: pointer;
-      transition: all 0.2s; display: flex; align-items: center; gap: 5px;
+    .gallery-cover {
+      width: 100%; aspect-ratio: 1 / 1; background-size: cover; background-position: center;
+      background-color: #eef3e8; display: flex; align-items: center; justify-content: center; font-size: 44px;
     }
-    .watered-btn:hover { background: #2d4a1e; }
+    .tile-btn {
+      position: absolute; top: 8px; background: rgba(255,255,255,0.9); border: none; border-radius: 50%;
+      width: 28px; height: 28px; font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: background 0.15s;
+    }
+    .tile-water-btn { right: 42px; }
+    .tile-water-btn:hover { background: white; }
+    .tile-delete-btn { right: 8px; color: #c8b8a0; }
+    .tile-delete-btn:hover { background: #fdf0ef; color: #c0392b; }
+    .tile-info { padding: 10px 12px; }
+    .tile-name { font-family: 'Lora', serif; font-size: 14px; font-weight: 600; color: #2d4a1e; }
+    .tile-sci { font-size: 11px; color: #9aaf80; font-style: italic; margin-top: 1px; }
+    .tile-status { font-size: 11px; margin-top: 5px; font-weight: 500; }
+    .tile-status.urgent { color: #c0392b; }
+    .tile-status.soon   { color: #d68910; }
+    .tile-status.ok     { color: #1e8449; }
+
     .delete-btn {
       background: transparent; border: none; cursor: pointer; color: #c8b8a0;
       font-size: 16px; padding: 4px; border-radius: 6px; transition: color 0.2s;
     }
     .delete-btn:hover { color: #c0392b; }
-    .edit-btn {
-      background: transparent; border: none; cursor: pointer; color: #c8b8a0;
-      font-size: 15px; padding: 4px; border-radius: 6px; transition: color 0.2s;
+
+    /* Detail view */
+    .detail-heading { display: flex; align-items: center; gap: 12px; margin: 16px 0 20px; }
+    .plant-name { font-family: 'Lora', serif; font-size: 20px; color: #2d4a1e; font-weight: 600; }
+    .plant-scientific { font-size: 13px; color: #9aaf80; font-style: italic; margin-top: 2px; }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #dce8c8; }
+    .tab-btn {
+      background: transparent; border: none; padding: 10px 16px; font-family: 'DM Sans', sans-serif;
+      font-size: 14px; font-weight: 500; color: #9aaf80; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s;
     }
-    .edit-btn:hover { color: #3d6b25; }
+    .tab-btn.active { color: #2d4a1e; border-bottom-color: #3d6b25; }
+    .tab-panel.hidden { display: none; }
+
+    .history-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid #eef3e8; flex-wrap: wrap; }
+    .history-label { font-size: 12px; color: #9aaf80; }
+    .history-value { font-size: 14px; color: #2d4a1e; font-weight: 500; margin-top: 2px; }
+    .history-actions { display: flex; gap: 8px; }
+    .history-entry { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eef3e8; font-size: 13px; color: #3d5a2a; gap: 8px; }
+    .history-add-form { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .history-add-form .form-input { flex: 1; min-width: 130px; }
+    .history-empty { color: #9aaf80; font-size: 13px; padding: 12px 0; text-align: center; }
+
+    .chat-placeholder { text-align: center; padding: 48px 24px; color: #9aaf80; font-size: 14px; }
 
     .empty-state { text-align: center; padding: 48px 24px; color: #9aaf80; }
     .empty-icon { font-size: 48px; margin-bottom: 12px; }
@@ -268,7 +289,7 @@
       </div>
     </div>
 
-    <div class="main">
+    <div class="main" id="gallery-view">
       <div class="status-bar">
         <div class="stat-card">
           <div class="stat-num" id="stat-urgent" style="color:#c0392b">0</div>
@@ -314,7 +335,106 @@
         <div class="empty-icon">🌱</div>
         <div class="empty-text">Noch keine Pflanzen. Suche oben nach deinen Pflanzen!</div>
       </div>
-      <div class="plant-grid" id="plant-grid"></div>
+      <div class="gallery-grid" id="gallery-grid"></div>
+    </div>
+
+    <!-- DETAIL VIEW -->
+    <div class="main hidden" id="detail-view">
+      <button class="btn btn-ghost btn-sm" onclick="closeDetail()">← Zurück</button>
+      <div class="detail-heading">
+        <span id="detail-emoji" style="font-size:32px"></span>
+        <div>
+          <div class="plant-name" id="detail-title"></div>
+          <div class="plant-scientific" id="detail-subtitle"></div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" id="tab-btn-details" onclick="switchTab('details')">Details</button>
+        <button class="tab-btn" id="tab-btn-chat" onclick="switchTab('chat')">Chat</button>
+      </div>
+
+      <div id="tab-details" class="tab-panel">
+        <div class="photo-section" id="photos-detail"></div>
+
+        <div class="form-group" style="margin-top:20px">
+          <label class="form-label">Trivialname</label>
+          <input class="form-input" id="detail-name" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Wissenschaftlicher Name</label>
+          <input class="form-input" id="detail-scientific-name" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Gieß-Rhythmus (Tage)</label>
+          <input class="form-input" id="detail-watering-days" type="number" min="1" max="60" />
+        </div>
+
+        <div class="history-row">
+          <div>
+            <div class="history-label">🚿 Zuletzt gegossen</div>
+            <div class="history-value" id="detail-last-watered">–</div>
+          </div>
+          <div class="history-actions">
+            <button class="btn btn-primary btn-sm" onclick="quickWater(state.currentPlantId)">💧 Jetzt gegossen</button>
+            <button class="btn btn-ghost btn-sm" onclick="openHistory('watering')">Verlauf</button>
+          </div>
+        </div>
+        <div class="history-row">
+          <div>
+            <div class="history-label">🌱 Zuletzt gedüngt</div>
+            <div class="history-value" id="detail-last-fertilized">–</div>
+          </div>
+          <div class="history-actions">
+            <button class="btn btn-primary btn-sm" onclick="quickFertilize(state.currentPlantId)">🌱 Jetzt gedüngt</button>
+            <button class="btn btn-ghost btn-sm" onclick="openHistory('fertilization')">Verlauf</button>
+          </div>
+        </div>
+
+        <div style="font-size:12px;color:#9aaf80;margin:20px 0 12px">Pflegedaten (von Open Plantbook)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Temp. min (°C)</label>
+            <input class="form-input" id="detail-min-temp" type="number" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Temp. max (°C)</label>
+            <input class="form-input" id="detail-max-temp" type="number" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Feuchte min (%)</label>
+            <input class="form-input" id="detail-min-moist" type="number" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Feuchte max (%)</label>
+            <input class="form-input" id="detail-max-moist" type="number" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Luftfeucht. min (%)</label>
+            <input class="form-input" id="detail-min-humidity" type="number" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Luftfeucht. max (%)</label>
+            <input class="form-input" id="detail-max-humidity" type="number" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Licht min (Lux)</label>
+            <input class="form-input" id="detail-min-light" type="number" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Licht max (Lux)</label>
+            <input class="form-input" id="detail-max-light" type="number" />
+          </div>
+        </div>
+
+        <div class="modal-actions" style="justify-content:flex-start;margin-top:24px">
+          <button class="btn btn-primary" onclick="saveDetail()">Speichern</button>
+        </div>
+      </div>
+
+      <div id="tab-chat" class="tab-panel hidden">
+        <div class="chat-placeholder">💬 Der Pflanzen-Chat kommt in einer der nächsten Phasen.</div>
+      </div>
     </div>
   </div>
 
@@ -357,64 +477,18 @@
     </div>
   </div>
 
-  <!-- EDIT MODAL -->
-  <div id="edit-modal" class="modal-overlay hidden" onclick="closeEditModal(event)">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:460px;max-height:90vh;overflow-y:auto">
-      <div class="modal-title">✏️ Pflanze bearbeiten</div>
-      <div class="form-group">
-        <label class="form-label">Trivialname</label>
-        <input class="form-input" id="edit-name" />
+  <!-- HISTORY MODAL -->
+  <div id="history-modal" class="modal-overlay hidden" onclick="closeHistoryModal(event)">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;max-height:85vh;overflow-y:auto">
+      <div class="modal-title" id="history-modal-title"></div>
+      <div id="history-list"></div>
+      <div class="history-add-form">
+        <input class="form-input" type="datetime-local" id="history-add-date" />
+        <input class="form-input" type="text" id="history-add-note" placeholder="Notiz (optional)" />
       </div>
-      <div class="form-group">
-        <label class="form-label">Wissenschaftlicher Name</label>
-        <input class="form-input" id="edit-scientific-name" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Gieß-Rhythmus (Tage)</label>
-        <input class="form-input" id="edit-watering-days" type="number" min="1" max="60" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Zuletzt gegossen</label>
-        <input class="form-input" id="edit-last-watered" type="datetime-local" />
-      </div>
-      <div style="font-size:12px;color:#9aaf80;margin:-14px 0 16px">Pflegedaten (von Open Plantbook)</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group" style="margin:0">
-          <label class="form-label">Temp. min (°C)</label>
-          <input class="form-input" id="edit-min-temp" type="number" />
-        </div>
-        <div class="form-group" style="margin:0">
-          <label class="form-label">Temp. max (°C)</label>
-          <input class="form-input" id="edit-max-temp" type="number" />
-        </div>
-        <div class="form-group" style="margin:0">
-          <label class="form-label">Feuchte min (%)</label>
-          <input class="form-input" id="edit-min-moist" type="number" />
-        </div>
-        <div class="form-group" style="margin:0">
-          <label class="form-label">Feuchte max (%)</label>
-          <input class="form-input" id="edit-max-moist" type="number" />
-        </div>
-        <div class="form-group" style="margin:0">
-          <label class="form-label">Luftfeucht. min (%)</label>
-          <input class="form-input" id="edit-min-humidity" type="number" />
-        </div>
-        <div class="form-group" style="margin:0">
-          <label class="form-label">Luftfeucht. max (%)</label>
-          <input class="form-input" id="edit-max-humidity" type="number" />
-        </div>
-        <div class="form-group" style="margin:0">
-          <label class="form-label">Licht min (Lux)</label>
-          <input class="form-input" id="edit-min-light" type="number" />
-        </div>
-        <div class="form-group" style="margin:0">
-          <label class="form-label">Licht max (Lux)</label>
-          <input class="form-input" id="edit-max-light" type="number" />
-        </div>
-      </div>
-      <div class="modal-actions" style="margin-top:20px">
-        <button class="btn btn-ghost" onclick="document.getElementById('edit-modal').classList.add('hidden')">Abbrechen</button>
-        <button class="btn btn-primary" onclick="saveEdit()">Speichern</button>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="document.getElementById('history-modal').classList.add('hidden')">Schließen</button>
+        <button class="btn btn-primary" onclick="addHistoryEntry()">+ Eintrag</button>
       </div>
     </div>
   </div>
@@ -430,7 +504,10 @@
     token: null,
     tokenExpiry: 0,
     plants: [],
-    pendingPlant: null
+    pendingPlant: null,
+    currentPlantId: null,
+    activeTab: "details",
+    historyType: null
   };
 
   // ─── Init ──────────────────────────────────────────────────────────────────
@@ -539,7 +616,7 @@
     document.getElementById("stat-ok").textContent     = state.plants.filter(p => getUrgency(p) === "ok").length;
     document.getElementById("plant-count").textContent = `(${state.plants.length})`;
 
-    const grid = document.getElementById("plant-grid");
+    const grid = document.getElementById("gallery-grid");
     const empty = document.getElementById("empty-state");
 
     if (sorted.length === 0) { grid.innerHTML = ""; empty.classList.remove("hidden"); return; }
@@ -547,39 +624,35 @@
 
     grid.innerHTML = sorted.map(plant => {
       const urgency = getUrgency(plant);
-      const d = plant.details || {};
-      const metaHtml = [
-        d.minTemp != null && d.maxTemp != null ? `<div class="meta-item"><div class="meta-key">Temperatur</div><div class="meta-val">${d.minTemp}–${d.maxTemp}°C</div></div>` : "",
-        d.minMoist != null && d.maxMoist != null ? `<div class="meta-item"><div class="meta-key">Bodenfeucht.</div><div class="meta-val">${d.minMoist}–${d.maxMoist}%</div></div>` : "",
-        d.minHumidity != null && d.maxHumidity != null ? `<div class="meta-item"><div class="meta-key">Luftfeucht.</div><div class="meta-val">${d.minHumidity}–${d.maxHumidity}%</div></div>` : "",
-        d.minLight != null ? `<div class="meta-item"><div class="meta-key">Licht</div><div class="meta-val">${Math.round(d.minLight/100)/10}k+ Lux</div></div>` : ""
-      ].join("");
-      const urgLabel = urgency === "urgent" ? "⚠️ Gießen!" : urgency === "soon" ? "💧 Bald" : "✓ Ok";
-
       return `
-        <div class="plant-card ${urgency}">
-          <div class="plant-card-top">
-            <span class="plant-icon">${getEmoji(plant.pid)}</span>
-            <div style="flex:1">
-              <div class="plant-name">${escHtml(plant.name)}</div>
-              <div class="plant-scientific">${escHtml(plant.scientificName)}</div>
-              <div style="margin-top:6px;font-size:12px;color:#9aaf80">Gieß-Rhythmus: alle ${plant.wateringDays} Tage</div>
-            </div>
-            <div class="plant-actions"><span class="water-status ${urgency}">${urgLabel}</span></div>
+        <div class="gallery-tile ${urgency}" onclick="openDetail('${plant.id}')">
+          <div class="gallery-cover" id="cover-${plant.id}">${getEmoji(plant.pid)}</div>
+          <button class="tile-btn tile-water-btn" title="Jetzt gegossen" onclick="event.stopPropagation();quickWater('${plant.id}')">💧</button>
+          <button class="tile-btn tile-delete-btn" title="Entfernen" onclick="event.stopPropagation();deletePlant('${plant.id}')">🗑</button>
+          <div class="tile-info">
+            <div class="tile-name">${escHtml(plant.name)}</div>
+            <div class="tile-sci">${escHtml(plant.scientificName)}</div>
+            <div class="tile-status ${urgency}">${statusLabel(plant)}</div>
           </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-            <div style="font-size:13px;color:#7a9060">${statusLabel(plant)}</div>
-            <div style="display:flex;gap:8px">
-              <button class="watered-btn" onclick="waterPlant('${plant.id}')">💧 Jetzt gegossen</button>
-              <button class="edit-btn" title="Bearbeiten" onclick="editPlant('${plant.id}')">✏️</button>
-              <button class="delete-btn" title="Entfernen" onclick="deletePlant('${plant.id}')">🗑</button>
-            </div>
-          </div>
-          ${metaHtml ? `<div class="plant-meta">${metaHtml}</div>` : ""}
-          <div class="photo-section" id="photos-${plant.id}"></div>
         </div>`;
     }).join("");
-    loadAllImages();
+    loadGalleryCovers();
+  }
+
+  async function loadGalleryCovers() {
+    for (const plant of state.plants) {
+      const cover = document.getElementById(`cover-${plant.id}`);
+      if (!cover) continue;
+      try {
+        const resp = await fetch(`${BACKEND}/${plant.id}/images`);
+        if (!resp.ok) continue;
+        const images = await resp.json();
+        if (images.length === 0) continue;
+        const latest = images[images.length - 1];
+        cover.style.backgroundImage = `url('/images/${latest.filename}')`;
+        cover.textContent = "";
+      } catch {}
+    }
   }
 
   function escHtml(str) {
@@ -736,7 +809,8 @@
   }
 
   // ─── Actions ───────────────────────────────────────────────────────────────
-  async function waterPlant(id) {
+  async function quickWater(id) {
+    if (!id) return;
     try {
       const result = await waterPlantOnServer(id);
       state.plants = state.plants.map(p => p.id === id ? { ...p, lastWatered: result.lastWatered } : p);
@@ -744,6 +818,19 @@
       state.plants = state.plants.map(p => p.id === id ? { ...p, lastWatered: new Date().toISOString() } : p);
     }
     renderPlants();
+    if (state.currentPlantId === id) refreshDetailDates();
+  }
+
+  async function quickFertilize(id) {
+    if (!id) return;
+    try {
+      const resp = await fetch(`${BACKEND}/${id}/fertilize`, { method: "PATCH" });
+      const result = await resp.json();
+      state.plants = state.plants.map(p => p.id === id ? { ...p, lastFertilized: result.lastFertilized } : p);
+    } catch {
+      state.plants = state.plants.map(p => p.id === id ? { ...p, lastFertilized: new Date().toISOString() } : p);
+    }
+    if (state.currentPlantId === id) refreshDetailDates();
   }
 
   async function deletePlant(id) {
@@ -768,7 +855,7 @@
   }
 
   function showPlantLightbox(plantId, idx) {
-    const section = document.getElementById(`photos-${plantId}`);
+    const section = document.getElementById("photos-detail");
     const images = JSON.parse(section.dataset.images || "[]");
     lightboxImages = images.map(i => ({
       src: `/images/${i.filename}`,
@@ -808,75 +895,185 @@
     if (e.key === "Escape") document.getElementById("lightbox").classList.add("hidden");
   });
 
-  // ─── Edit ──────────────────────────────────────────────────────────────────
-  let editingPlantId = null;
-
-  function editPlant(id) {
+  // ─── Detail view ───────────────────────────────────────────────────────────
+  function openDetail(id) {
     const plant = state.plants.find(p => p.id === id);
     if (!plant) return;
-    editingPlantId = id;
+    state.currentPlantId = id;
     const d = plant.details || {};
 
-    document.getElementById("edit-name").value = plant.name || "";
-    document.getElementById("edit-scientific-name").value = plant.scientificName || "";
-    document.getElementById("edit-watering-days").value = plant.wateringDays || 7;
-    document.getElementById("edit-last-watered").value = plant.lastWatered
-      ? plant.lastWatered.substring(0, 16) : "";
-    document.getElementById("edit-min-temp").value   = d.minTemp  ?? "";
-    document.getElementById("edit-max-temp").value   = d.maxTemp  ?? "";
-    document.getElementById("edit-min-moist").value  = d.minMoist ?? "";
-    document.getElementById("edit-max-moist").value  = d.maxMoist ?? "";
-    document.getElementById("edit-min-humidity").value = d.minHumidity ?? "";
-    document.getElementById("edit-max-humidity").value = d.maxHumidity ?? "";
-    document.getElementById("edit-min-light").value    = d.minLight ?? "";
-    document.getElementById("edit-max-light").value    = d.maxLight ?? "";
+    document.getElementById("detail-emoji").textContent = getEmoji(plant.pid);
+    document.getElementById("detail-title").textContent = plant.name || "";
+    document.getElementById("detail-subtitle").textContent = plant.scientificName || "";
+    document.getElementById("detail-name").value = plant.name || "";
+    document.getElementById("detail-scientific-name").value = plant.scientificName || "";
+    document.getElementById("detail-watering-days").value = plant.wateringDays || 7;
+    document.getElementById("detail-min-temp").value   = d.minTemp  ?? "";
+    document.getElementById("detail-max-temp").value   = d.maxTemp  ?? "";
+    document.getElementById("detail-min-moist").value  = d.minMoist ?? "";
+    document.getElementById("detail-max-moist").value  = d.maxMoist ?? "";
+    document.getElementById("detail-min-humidity").value = d.minHumidity ?? "";
+    document.getElementById("detail-max-humidity").value = d.maxHumidity ?? "";
+    document.getElementById("detail-min-light").value    = d.minLight ?? "";
+    document.getElementById("detail-max-light").value    = d.maxLight ?? "";
 
-    document.getElementById("edit-modal").classList.remove("hidden");
+    refreshDetailDates();
+    switchTab("details");
+    document.getElementById("gallery-view").classList.add("hidden");
+    document.getElementById("detail-view").classList.remove("hidden");
+    loadDetailPhotos(id);
   }
 
-  async function saveEdit() {
-    if (!editingPlantId) return;
-    const plant = state.plants.find(p => p.id === editingPlantId);
+  function closeDetail() {
+    state.currentPlantId = null;
+    document.getElementById("detail-view").classList.add("hidden");
+    document.getElementById("gallery-view").classList.remove("hidden");
+  }
+
+  function switchTab(tab) {
+    state.activeTab = tab;
+    document.getElementById("tab-btn-details").classList.toggle("active", tab === "details");
+    document.getElementById("tab-btn-chat").classList.toggle("active", tab === "chat");
+    document.getElementById("tab-details").classList.toggle("hidden", tab !== "details");
+    document.getElementById("tab-chat").classList.toggle("hidden", tab !== "chat");
+  }
+
+  function formatDate(dateStr) {
+    return new Date(dateStr).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+
+  function refreshDetailDates() {
+    const plant = state.plants.find(p => p.id === state.currentPlantId);
+    if (!plant) return;
+    document.getElementById("detail-last-watered").textContent = plant.lastWatered
+      ? formatDate(plant.lastWatered) : "Noch nie gegossen";
+    document.getElementById("detail-last-fertilized").textContent = plant.lastFertilized
+      ? formatDate(plant.lastFertilized) : "Noch nie gedüngt";
+  }
+
+  async function saveDetail() {
+    const id = state.currentPlantId;
+    if (!id) return;
+    const plant = state.plants.find(p => p.id === id);
     if (!plant) return;
 
-    const lastWateredRaw = document.getElementById("edit-last-watered").value;
     const num = s => { const v = parseFloat(s); return isNaN(v) ? null : v; };
 
     const updated = {
-      name:           document.getElementById("edit-name").value.trim() || plant.name,
-      scientificName: document.getElementById("edit-scientific-name").value.trim(),
-      wateringDays:   parseInt(document.getElementById("edit-watering-days").value) || 7,
-      lastWatered:    lastWateredRaw ? lastWateredRaw + ":00.000Z" : plant.lastWatered,
+      name:           document.getElementById("detail-name").value.trim() || plant.name,
+      scientificName: document.getElementById("detail-scientific-name").value.trim(),
+      wateringDays:   parseInt(document.getElementById("detail-watering-days").value) || 7,
       details: {
-        minTemp:  num(document.getElementById("edit-min-temp").value),
-        maxTemp:  num(document.getElementById("edit-max-temp").value),
-        minMoist: num(document.getElementById("edit-min-moist").value),
-        maxMoist: num(document.getElementById("edit-max-moist").value),
-        minHumidity: num(document.getElementById("edit-min-humidity").value),
-        maxHumidity: num(document.getElementById("edit-max-humidity").value),
-        minLight: num(document.getElementById("edit-min-light").value),
-        maxLight: num(document.getElementById("edit-max-light").value)
+        minTemp:  num(document.getElementById("detail-min-temp").value),
+        maxTemp:  num(document.getElementById("detail-max-temp").value),
+        minMoist: num(document.getElementById("detail-min-moist").value),
+        maxMoist: num(document.getElementById("detail-max-moist").value),
+        minHumidity: num(document.getElementById("detail-min-humidity").value),
+        maxHumidity: num(document.getElementById("detail-max-humidity").value),
+        minLight: num(document.getElementById("detail-min-light").value),
+        maxLight: num(document.getElementById("detail-max-light").value)
       }
     };
 
-    const savedId = editingPlantId;
-
-    // Update local state immediately
-    const idx = state.plants.findIndex(p => p.id === savedId);
+    const idx = state.plants.findIndex(p => p.id === id);
     if (idx !== -1) state.plants[idx] = { ...state.plants[idx], ...updated };
 
-    document.getElementById("edit-modal").classList.add("hidden");
-    editingPlantId = null;
+    document.getElementById("detail-title").textContent = updated.name;
+    document.getElementById("detail-subtitle").textContent = updated.scientificName;
     renderPlants();
 
-    // Persist to server (no state reload — local update is authoritative)
-    try { await updatePlantOnServer(savedId, updated); } catch {}
+    try { await updatePlantOnServer(id, updated); } catch {}
   }
 
-  function closeEditModal(event) {
-    if (event.target.id === "edit-modal") {
-      document.getElementById("edit-modal").classList.add("hidden");
-      editingPlantId = null;
+  // ─── History (Gießen / Düngen) ─────────────────────────────────────────────
+  function historyEndpoint(type) {
+    return type === "watering" ? "waterings" : "fertilizations";
+  }
+
+  async function openHistory(type) {
+    state.historyType = type;
+    if (!state.currentPlantId) return;
+    document.getElementById("history-modal-title").textContent =
+      type === "watering" ? "🚿 Gieß-Verlauf" : "🌱 Düngungs-Verlauf";
+    document.getElementById("history-add-date").value = "";
+    document.getElementById("history-add-note").value = "";
+    await loadHistoryList();
+    document.getElementById("history-modal").classList.remove("hidden");
+  }
+
+  async function loadHistoryList() {
+    const id = state.currentPlantId;
+    const type = state.historyType;
+    if (!id || !type) return;
+    const list = document.getElementById("history-list");
+    try {
+      const resp = await fetch(`${BACKEND}/${id}/${historyEndpoint(type)}`);
+      const entries = await resp.json();
+      if (entries.length === 0) {
+        list.innerHTML = '<div class="history-empty">Noch keine Einträge.</div>';
+        return;
+      }
+      list.innerHTML = entries.map(e => {
+        const dateVal = type === "watering" ? e.wateredAt : e.fertilizedAt;
+        const date = new Date(dateVal).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+        return `
+          <div class="history-entry">
+            <span>${date}${e.note ? " · " + escHtml(e.note) : ""}</span>
+            <button class="delete-btn" onclick="deleteHistoryEntry(${e.id})">🗑</button>
+          </div>`;
+      }).join("");
+    } catch {
+      list.innerHTML = '<div class="history-empty">Verlauf konnte nicht geladen werden.</div>';
+    }
+  }
+
+  async function addHistoryEntry() {
+    const id = state.currentPlantId;
+    const type = state.historyType;
+    if (!id || !type) return;
+    const dateRaw = document.getElementById("history-add-date").value;
+    const note = document.getElementById("history-add-note").value.trim();
+    const body = {};
+    if (dateRaw) body[type === "watering" ? "wateredAt" : "fertilizedAt"] = dateRaw + ":00.000Z";
+    if (note) body.note = note;
+
+    try {
+      await fetch(`${BACKEND}/${id}/${historyEndpoint(type)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    } catch {}
+
+    document.getElementById("history-add-date").value = "";
+    document.getElementById("history-add-note").value = "";
+    await loadHistoryList();
+    await refreshCurrentPlantFromServer();
+  }
+
+  async function deleteHistoryEntry(entryId) {
+    const id = state.currentPlantId;
+    const type = state.historyType;
+    if (!id || !type) return;
+    if (!confirm("Eintrag wirklich löschen?")) return;
+    try {
+      await fetch(`${BACKEND}/${id}/${historyEndpoint(type)}/${entryId}`, { method: "DELETE" });
+    } catch {}
+    await loadHistoryList();
+    await refreshCurrentPlantFromServer();
+  }
+
+  async function refreshCurrentPlantFromServer() {
+    try {
+      state.plants = await loadPlantsFromServer();
+    } catch {}
+    renderPlants();
+    refreshDetailDates();
+  }
+
+  function closeHistoryModal(event) {
+    if (event.target.id === "history-modal") {
+      document.getElementById("history-modal").classList.add("hidden");
     }
   }
 
@@ -946,24 +1143,20 @@
     searchPlants();
   }
 
-  // ─── Photos ────────────────────────────────────────────────────────────────
+  // ─── Photos (Detailansicht) ─────────────────────────────────────────────────
   const carouselIdx = {};
 
-  async function loadAllImages() {
-    for (const plant of state.plants) {
-      const section = document.getElementById(`photos-${plant.id}`);
-      if (!section) continue;
-      try {
-        const resp = await fetch(`${BACKEND}/${plant.id}/images`);
-        if (!resp.ok) continue;
-        const images = await resp.json();
-        renderPhotoSection(plant.id, images);
-      } catch {}
-    }
+  async function loadDetailPhotos(plantId) {
+    try {
+      const resp = await fetch(`${BACKEND}/${plantId}/images`);
+      if (!resp.ok) return;
+      const images = await resp.json();
+      renderPhotoSection(plantId, images);
+    } catch {}
   }
 
   function renderPhotoSection(plantId, images) {
-    const section = document.getElementById(`photos-${plantId}`);
+    const section = document.getElementById("photos-detail");
     if (!section) return;
     if (carouselIdx[plantId] === undefined) carouselIdx[plantId] = 0;
     const idx = Math.min(carouselIdx[plantId], Math.max(0, images.length - 1));
@@ -998,7 +1191,7 @@
   }
 
   function carouselNav(plantId, dir) {
-    const section = document.getElementById(`photos-${plantId}`);
+    const section = document.getElementById("photos-detail");
     if (!section) return;
     const images = JSON.parse(section.dataset.images || "[]");
     carouselIdx[plantId] = ((carouselIdx[plantId] || 0) + dir + images.length) % images.length;
@@ -1017,6 +1210,7 @@
       const images = await imagesResp.json();
       carouselIdx[plantId] = images.length - 1;
       renderPhotoSection(plantId, images);
+      loadGalleryCovers();
     } catch {
       alert("Upload fehlgeschlagen.");
     }
@@ -1030,6 +1224,7 @@
       const images = await resp.json();
       carouselIdx[plantId] = Math.max(0, Math.min(carouselIdx[plantId] || 0, images.length - 1));
       renderPhotoSection(plantId, images);
+      loadGalleryCovers();
     } catch {}
   }
 
