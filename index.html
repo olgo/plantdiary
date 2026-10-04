@@ -483,9 +483,9 @@
             <button class="btn btn-ghost btn-sm" onclick="deleteNotePage()">🗑 Blatt löschen</button>
           </div>
         </div>
-        <textarea class="form-input" id="note-text" rows="4" style="min-height:100px;resize:vertical"
+        <textarea class="form-input" id="note-text" rows="6" style="min-height:160px;resize:none;overflow:hidden"
           placeholder="Notiz eintippen – oder mit dem Apple Pencil direkt hier hineinschreiben, iPadOS wandelt das automatisch in Text um (Scribble)."
-          oninput="scheduleNoteTextSave()"></textarea>
+          oninput="scheduleNoteTextSave();autoResizeNoteText()"></textarea>
         <div class="note-canvas-toolbar">
           <span id="note-save-status" class="note-save-status"></span>
           <div style="margin-left:auto;display:flex;gap:8px">
@@ -1147,6 +1147,7 @@
     document.getElementById("note-page-prev").disabled = state.currentNotePageIndex <= 0;
     document.getElementById("note-page-next").disabled = state.currentNotePageIndex >= total - 1;
     document.getElementById("note-text").value = page ? (page.text || "") : "";
+    autoResizeNoteText();
     setNoteSaveStatus("");
 
     const plantId = state.currentPlantId;
@@ -1163,6 +1164,12 @@
       noteBaseImage = null;
       redrawNoteCanvas();
     }
+  }
+
+  function autoResizeNoteText() {
+    const el = document.getElementById("note-text");
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
   }
 
   function notePageNav(dir) {
