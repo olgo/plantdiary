@@ -214,6 +214,7 @@
     .identify-hint {
       margin-top: 8px; padding: 8px 12px; background: #f0f7e6;
       border-radius: 8px; font-size: 12px; color: #5a7a40; line-height: 1.5;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
     }
     .identify-result-card {
       display: flex; align-items: center; padding: 10px 12px; border-radius: 10px;
@@ -1551,10 +1552,28 @@
     document.getElementById("identify-results").classList.add("hidden");
 
     const hint = document.getElementById("identify-hint");
-    hint.innerHTML = `🌿 <strong>${escHtml(commonName || scientificName)}</strong> · ${confidence}% Übereinstimmung`;
+    hint.innerHTML = `
+      <span>🌿 <strong>${escHtml(commonName || scientificName)}</strong> · ${confidence}% Übereinstimmung</span>
+      <button class="btn btn-primary btn-sm" onclick="openIdentifiedPlantModal('${escHtml(scientificName)}','${escHtml(commonName)}')">+ Diese Pflanze hinzufügen</button>
+    `;
     hint.classList.remove("hidden");
 
     searchPlants();
+  }
+
+  // Direkter Fallback, falls OpenPlantbook die von PlantNet erkannte Art nicht
+  // kennt (z.B. Wildpflanzen) - dann bleibt die Pflanzenbuch-Suche sonst ohne
+  // Ergebnis und es gibt keinen Weg mehr, die erkannte Pflanze hinzuzufügen.
+  function openIdentifiedPlantModal(scientificName, commonName) {
+    const displayName = commonName || scientificName;
+    state.pendingPlant = { pid: null, alias: displayName, details: {} };
+    document.getElementById("modal-emoji").textContent     = getEmoji(scientificName);
+    document.getElementById("modal-name").textContent      = displayName;
+    document.getElementById("modal-pid").textContent       = "";
+    document.getElementById("modal-custom-name").value     = displayName;
+    document.getElementById("modal-scientific-name").value = scientificName;
+    document.getElementById("modal-watering-days").value   = 7;
+    document.getElementById("add-modal").classList.remove("hidden");
   }
 
   // ─── Photos (Detailansicht) ─────────────────────────────────────────────────
