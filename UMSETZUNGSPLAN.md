@@ -1,15 +1,16 @@
-# Plantdiary – Umsetzungsplan (Redesign & KI-Erweiterung)
+# Plantdiary – Umsetzungsplan & Stand der Umsetzung
 
-*Stand: 28. September 2026*
+*Ursprünglich erstellt am 28. September 2026 als Plan vor Baubeginn. Aktualisiert am 15. Oktober 2026 auf den tatsächlichen Umsetzungsstand.*
 
-Dieses Dokument fasst die Ideen aus der gemeinsamen Planungsrunde zusammen und schlägt eine Umsetzungsreihenfolge vor. Es ersetzt nicht die bestehende `DOKUMENTATION.md` (Betrieb/Deployment) oder `plantdiary-ki-architektur.md` (ursprüngliches KI-Konzept), sondern konkretisiert und aktualisiert Teile davon.
+Dieses Dokument fasste ursprünglich die Ideen aus der gemeinsamen Planungsrunde zusammen und schlug eine Umsetzungsreihenfolge vor. Alle darin beschriebenen Phasen sind inzwischen umgesetzt und produktiv im Einsatz; das Dokument wurde entsprechend nachgezogen und dient jetzt auch als Rückblick, was tatsächlich gebaut wurde (inkl. Abweichungen vom ursprünglichen Plan). Es ersetzt weiterhin nicht die `DOKUMENTATION.md` (Betrieb/Deployment) oder `plantdiary-ki-architektur.md` (ursprüngliches KI-Konzept), sondern konkretisiert und aktualisiert Teile davon.
 
-## Ausgangslage
+## Ausgangslage (Stand vor Baubeginn)
 
 - Bestehende App: Flask-Backend + Single-File-Frontend (`index.html`), SQLite, bereits produktiv im Einsatz.
-- Arten-ID läuft bereits über PlantNet (Cloud-API), Pflegewerte kommen von Open Plantbook.
-- Push-Gieß-Erinnerungen laufen über einen täglichen systemd-Timer (`notify.py`), der `plants.last_watered` ausliest.
-- Repo wurde neu unter Versionskontrolle gebracht; ein zuvor versehentlich committeter API-Key wurde aus der Git-History entfernt (Force-Push). **Offen:** PlantNet-Key und interner API-Key sollten trotzdem noch rotiert werden (siehe Abschnitt „Sicherheit" unten) – das ist unabhängig vom Rest dieses Plans und kann jederzeit erledigt werden.
+- Arten-ID lief bereits über PlantNet (Cloud-API), Pflegewerte kamen von Open Plantbook.
+- Push-Gieß-Erinnerungen liefen über einen täglichen systemd-Timer (`notify.py`), der `plants.last_watered` auslas.
+- Repo wurde neu unter Versionskontrolle gebracht; ein zuvor versehentlich committeter API-Key wurde aus der Git-History entfernt (Force-Push).
+- **Sicherheits-Update:** Der PlantNet-API-Key wurde zwischenzeitlich erneuert (bestätigt). Der Status des internen `API_KEY` ist unklar — das lässt sich von hier aus nicht prüfen, sollte bei Gelegenheit einmal gegengecheckt werden (siehe Abschnitt „Sicherheit" unten).
 
 ## Bewusst verworfene/geänderte Ideen aus der ursprünglichen KI-Architektur-Doku
 
@@ -20,21 +21,19 @@ Dieses Dokument fasst die Ideen aus der gemeinsamen Planungsrunde zusammen und s
 
 ---
 
-## Gesamtbild: Was gebaut wird
+## Gesamtbild: Was gebaut wurde
 
-### 1. Frontend-Redesign
+### 1. Frontend-Redesign ✅ umgesetzt
 
-- **Übersicht:** Galerie-artige Ansicht aller Pflanzen (statt der heutigen Stat-Karten), fotolastig – nutzt die bereits vorhandene `plant_images`-Funktionalität.
-- **Detailansicht pro Pflanze:** Aufruf per Klick auf eine Kachel. Zwei Tabs:
-  - **„Plant Details"** – alles, was heute im Edit-Modal + in der Lightbox steckt (Name, wiss. Name, Gieß-Rhythmus, Pflegewerte, Fotos), plus:
-    - Gieß-Verlauf: nur letztes Datum sichtbar, Button öffnet volle Historie
-    - Düngungs-Verlauf: gleiches Prinzip
+- **Übersicht:** Galerie-artige Ansicht aller Pflanzen (statt der früheren Stat-Karten), fotolastig – nutzt `plant_images`.
+- **Detailansicht pro Pflanze:** Aufruf per Klick auf eine Kachel. **Drei** Tabs (ursprünglich waren zwei geplant, „Notizen" kam später als eigenständige Anforderung dazu, siehe Abschnitt 6):
+  - **„Details"** – Name, wiss. Name, Gieß-Rhythmus, Pflegewerte, Fotos, plus Gieß- und Düngungs-Verlauf (jeweils nur letztes Datum sichtbar, Button öffnet volle Historie als Modal)
   - **„Chat"** – pflanzenbezogener KI-Chat (siehe Abschnitt 4)
-- Technische Implikation: Es gibt aktuell keine Navigationsebene (kein Router, kein View-State) – das muss neu eingeführt werden, ist aber ohne Framework machbar.
+  - **„Notizen"** – freie Text-/Skizzen-Notizen, mehrseitig (siehe Abschnitt 6)
 
-### 2. Datenmodell-Änderungen
+### 2. Datenmodell-Änderungen ✅ umgesetzt
 
-Neue Tabellen (ersetzen `plants.last_watered`):
+`plants.last_watered` wurde durch eigene Historientabellen ersetzt:
 
 ```sql
 CREATE TABLE plant_waterings (
@@ -52,65 +51,87 @@ CREATE TABLE plant_fertilizations (
 );
 ```
 
-- Einträge sind **löschbar/korrigierbar** (analog zu `plant_images`).
-- `plants.last_watered` wird entfernt; das "letzte Datum" wird live per `MAX(watered_at)` ermittelt statt redundant gespeichert.
-- **Migration:** Bestehende `last_watered`-Werte müssen beim Umstieg als erster Eintrag in `plant_waterings` übernommen werden, sonst ist die Historie beim ersten Start leer.
-- **`notify.py` muss angepasst werden** – liest aktuell direkt `plants.last_watered`; ohne Anpassung laufen die Push-Gieß-Erinnerungen sonst ins Leere.
-- Schneller "Gießen"-Button bleibt zusätzlich auf der Kachel in der Galerie-Übersicht erhalten (nicht nur in der Detailansicht).
+- Einträge sind löschbar/korrigierbar (analog zu `plant_images`).
+- `plants.last_watered` wurde entfernt; das „letzte Datum" wird live per `MAX(watered_at)` ermittelt.
+- Migration der bestehenden `last_watered`-Werte lief beim ersten Start automatisch (`migrate_last_watered()`).
+- `notify.py` wurde angepasst und liest jetzt die neue Tabelle.
+- Der schnelle „Gießen"-Button ist zusätzlich weiterhin direkt auf der Galerie-Kachel verfügbar.
+- Die Notizen-Tabelle(n) kamen als separate, spätere Erweiterung dazu – siehe Abschnitt 6.
 
-### 3. Authentifizierung vereinfachen
+### 3. Authentifizierung vereinfacht ✅ umgesetzt
 
-- Aktuell: zwei Auth-Schritte – Nginx Basic-Auth **und** ein App-interner "Login"-Screen, der eigentlich nur ein Open-Plantbook-OAuth-Token holt (Client-ID/Secret manuell eingegeben, in `localStorage` gecacht).
-- **Neu:** Open-Plantbook-Credentials wandern serverseitig nach `/etc/plantdiary.env` (analog zum bestehenden `PLANTNET_API_KEY`-Muster). Der Token-Fetch läuft über einen neuen Backend-Proxy-Endpunkt statt direkt aus dem Browser.
-- Ergebnis: Der Setup-Screen entfällt komplett, übrig bleibt nur noch die eine Basic-Auth-Abfrage. Nebeneffekt: Secret liegt nicht mehr im Browser-`localStorage`.
+- Open-Plantbook-Credentials liegen serverseitig in `/etc/plantdiary.env` (analog zum `PLANTNET_API_KEY`-Muster).
+- Der Token-Fetch läuft über einen Backend-Proxy-Endpunkt (`GET /api/plants/opb-token`) statt direkt aus dem Browser.
+- Der frühere eigene Login-Screen entfällt; übrig bleibt nur noch die Nginx-Basic-Auth-Abfrage. Secret liegt nicht mehr im Browser-`localStorage`.
 
-### 4. KI-Chat mit Tool-Use (pro Pflanze)
+### 4. KI-Chat mit Tool-Use (pro Pflanze) ✅ umgesetzt — mit Abweichung beim Modell-Anbieter
 
-- Neuer Endpunkt, z. B. `POST /api/plants/<id>/chat`.
-- **Wichtig für die Sicherheit:** Die `plant_id` kommt aus der URL, nicht vom LLM – Tools sind fest an die eine Pflanze gebunden, damit der Chat einer Pflanze nicht versehentlich eine andere verändern kann.
-- Zwei Tool-Kategorien:
-  - **Aktions-Tools** (schreibend): Gieß-Rhythmus ändern, Gießen/Düngen loggen (schreiben in die neuen Historie-Tabellen aus Abschnitt 2)
-  - **Lese-Tools** (auf Abruf, nicht automatisch bei jeder Nachricht): `get_plant_photos` – die KI holt sich gezielt Fotos aus der Galerie, wenn die Frage das erfordert (z. B. Verlaufsvergleich, Diagnose). Vermeidet, dass bei jeder einfachen Textfrage unnötig alle Bilder mitgeschickt werden.
-- **Krankheits-/Schädlings-Diagnose** läuft über denselben Chat: Foto hochladen, KI analysiert es direkt (Vision-Fähigkeit des LLM) – kein separates Feature, keine eigene Trainingspipeline.
-- **Modellwahl:** Claude Sonnet 5 als solider Standard für zuverlässiges Tool-Use bei überschaubaren Kosten; Claude Haiku 4.5 als noch günstigere Alternative, falls die Antwortqualität dafür ausreicht. Bei diesem Nutzungsvolumen (eine Person, gelegentliche Anfragen) bewegen sich die Kosten ohnehin im Cent-Bereich pro Monat.
+- Endpunkt: `POST /api/plants/<id>/chat`.
+- Die `plant_id` kommt aus der URL, nicht vom LLM – Tools sind fest an die eine Pflanze gebunden.
+- Zwei Tool-Kategorien, wie geplant:
+  - **Aktions-Tools** (schreibend): `set_watering_days`, `log_watering`, `log_fertilization`
+  - **Lese-Tools** (auf Abruf): `get_plant_photos`
+- Krankheits-/Schädlings-Diagnose läuft über denselben Chat per Bild-Upload (Vision-Fähigkeit des LLM).
 
-### 5. PWA / Offline (für das iPad-Terminal-Szenario)
+**Abweichung vom ursprünglichen Plan:** Geplant war Claude (Sonnet 5 bzw. Haiku 4.5) als Anbieter. In der Praxis erforderte die Anthropic-API ein Prepaid-Guthaben, das nicht eingezahlt werden sollte — der Chat läuft daher stattdessen über **Google Gemini** (kostenlose Nutzungsstufe). Das brachte eigene, erst im Live-Betrieb sichtbare Probleme mit sich:
+- `gemini-2.5-flash`/`-flash-lite` sind für neue API-Keys nicht mehr verfügbar, `gemini-2.0-flash` ist abgekündigt.
+- `gemini-3.8-flash` (Googles aktuelle Empfehlung) hatte in der Praxis ein sehr knappes Freikontingent (~20 Anfragen/Tag) und lieferte auch danach wiederholt `503 UNAVAILABLE` wegen Überlastung.
+- Finale Wahl: **`gemini-3.5-flash-lite`** (großzügigeres Freikontingent, ~1500 Anfragen/Tag), zusätzlich mit Retry-Logik (bis zu 3 Versuche, 2s/4s-Backoff) speziell für 5xx-Serverfehler, nicht für Rate-Limit-Fehler (429).
+- Das Wire-Format zwischen Frontend und Backend blieb beim Umbau unverändert (Anthropic-Content-Block-Form), sodass die Migration rein Backend-seitig war.
 
-- Bisher fehlt komplett: kein `manifest.json`, kein `<link rel="manifest">`.
-- Der bestehende `sw.js` kann nur Push-Events, kein Caching von App-Shell/Assets.
-- Nötig: `manifest.json` (Icon, Start-URL, Standalone-Display) + erweiterter Service Worker für Offline-Caching, damit "Zum Home-Bildschirm hinzufügen" wie eine echte App funktioniert.
+### 5. PWA / Offline ✅ umgesetzt — mit zwei Nachbesserungen
 
----
-
-## Vorgeschlagene Umsetzungsreihenfolge
-
-Die Reihenfolge berücksichtigt Abhängigkeiten (z. B. braucht die Detailansicht die neuen Historie-Endpunkte) und versucht, früh nutzbare Verbesserungen zu liefern.
-
-**Phase 1 – Datenbank-Fundament**
-Neue Tabellen, Migration, CRUD-Endpunkte für Gieß-/Düngungs-Historie, `notify.py` umstellen. Grundlage für Phase 3 und 4.
-
-**Phase 2 – Auth-Vereinfachung**
-Kleine, in sich geschlossene Verbesserung, unabhängig vom Rest. Kann parallel oder vorgezogen werden, da sie sofort spürbar ist (nur noch ein Login-Schritt).
-
-**Phase 3 – Frontend-Redesign**
-Galerie-Ansicht, Detailansicht mit Tab-Navigation, Details-Tab inkl. Verlaufs-Anzeige (nutzt Phase 1).
-
-**Phase 4 – KI-Chat**
-Backend-Endpunkt, Aktions- und Lese-Tools, Vision-Diagnose, Chat-Tab im Frontend (nutzt Phase 1 für die Aktions-Tools, baut auf der Tab-Struktur aus Phase 3 auf).
-
-**Phase 5 – PWA/Offline**
-Kann grundsätzlich jederzeit unabhängig ergänzt werden, macht aber am meisten Sinn, wenn die neue Oberfläche (Phase 3) schon steht.
+- `manifest.json` (Icon, Start-URL, Standalone-Display) + `sw.js` mit App-Shell-Caching (cache-first für `/`, Manifest, Icons; network-only für API/Bilder/Pflanzensuche, damit Pflanzendaten nie veraltet aus dem Cache kommen).
+- **Nachbesserung 1 – Cache-Versionierung:** Der Service Worker erkennt nur dann eine neue App-Shell-Version, wenn sich `sw.js` selbst ändert. Bei einem reinen `index.html`-Update ohne `sw.js`-Änderung blieb die alte Seite im Cache hängen und rief inzwischen entfernte Backend-Endpunkte auf (404s). Lösung: `CACHE_NAME` wird bei jedem App-Shell-relevanten Release mit hochgezählt.
+- **Nachbesserung 2 – Maskable Icons:** `icon-192.png`/`icon-512.png` hatten ursprünglich transparente, bereits abgerundete Ecken statt eines randlos füllenden Hintergrunds – das widerspricht der in `manifest.json` deklarierten `purpose: "any maskable"` und kann dazu führen, dass das Home-Bildschirm-Icon kaputt/fehlend aussieht, wenn das Betriebssystem seine eigene Maske darüberlegt. Ecken wurden mit der Theme-Farbe (`#3d6b25`) aufgefüllt.
+- **Noch unbestätigt:** Ob das Icon auf dem iPad nach diesen Fixes tatsächlich korrekt auf dem Home-Bildschirm erscheint, wurde zuletzt noch nicht zurückgemeldet/getestet.
 
 ---
 
-## Sicherheit – weiterhin offen
+## 6. Notizen-Feature (nicht im ursprünglichen Plan — später ergänzte Anforderung)
 
-- PlantNet-API-Key rotieren (my.plantnet.org) – war öffentlich sichtbar.
-- Internen `API_KEY` erneuern und in `/etc/plantdiary.env` sowie der aktiven Nginx-Config eintragen.
-- Beides unabhängig vom restlichen Plan, jederzeit nachholbar.
+Kam erst nach Abschluss der ursprünglich geplanten Phasen als eigener Wunsch dazu: ein dritter Tab für freie, pflanzenbezogene Notizen, mit Apple-Pencil-Unterstützung.
 
-## Offene Detailfragen für die Umsetzung
+**V1 – ein Notizblatt pro Pflanze:**
+- Zwei Eingabebereiche: ein `<textarea>` (iPadOS Scribble wandelt Pencil-Handschrift darin automatisch in Text um – keine App-Logik nötig) und ein `<canvas>` für freie Skizzen, per Pointer Events API (inkl. `pressure` für Apple-Pencil-Strichstärke).
+- Tabelle `plant_notes` (eine Zeile pro Pflanze), Endpunkte `GET/PATCH /api/plants/<id>/note`, `POST/DELETE /api/plants/<id>/note/sketch`.
 
-- Genaue Tool-Definitionen für den Chat (Namen, Parameter) – wird beim Bau von Phase 4 festgelegt.
-- Feingranulare UI-Details der Historie-Ansicht (Modal vs. aufklappbarer Bereich) – kann beim Bau von Phase 3 entschieden werden.
-- Manifest-Icons/Branding fürs Home-Bildschirm-Icon – braucht ggf. ein eigenes App-Icon-Design.
+**V2 – mehrseitige Notizblätter** (Umstieg, nachdem sich zeigte, dass ein Blatt nicht reicht):
+- `plant_notes` ersetzt durch `plant_note_pages` (eine Zeile pro Seite statt pro Pflanze), mit einmaliger Migration der bisherigen Notiz als jeweils erste Seite.
+- Neue Endpunkte: `GET/POST /api/plants/<id>/notes`, `PATCH/DELETE /api/plants/<id>/notes/<page_id>`, `POST/DELETE /api/plants/<id>/notes/<page_id>/sketch`.
+- Seiten-Navigation im Tab (‹ Seite X/Y ›, „+ Neues Blatt", „🗑 Blatt löschen"), nach demselben Carousel-Muster wie die Foto-Galerie. Wird die letzte Seite gelöscht, legt die App automatisch eine neue leere Seite an.
+- Das Textfeld wächst inzwischen dynamisch mit dem Inhalt mit (Start-Höhe 160px, kein manueller Resize-Griff mehr nötig).
+
+---
+
+## Umsetzungsreihenfolge – tatsächlicher Verlauf
+
+**Phase 1 – Datenbank-Fundament** ✅ erledigt
+Neue Tabellen, Migration, CRUD-Endpunkte für Gieß-/Düngungs-Historie, `notify.py` umgestellt.
+
+**Phase 2 – Auth-Vereinfachung** ✅ erledigt
+
+**Phase 3 – Frontend-Redesign** ✅ erledigt
+Galerie-Ansicht, Detailansicht mit Tab-Navigation, Details-Tab inkl. Verlaufs-Anzeige.
+
+**Phase 4 – KI-Chat** ✅ erledigt, Anbieter abweichend von der Planung (Gemini statt Claude, siehe Abschnitt 4)
+
+**Phase 5 – PWA/Offline** ✅ erledigt, inkl. zweier Nachbesserungen (siehe Abschnitt 5)
+
+**Phase 6 – Notizen** ✅ erledigt, inkl. Umstieg von Einzelblatt auf Mehrseiten-Notizblätter (nicht im ursprünglichen Plan, siehe Abschnitt 6)
+
+Zusätzlich im laufenden Betrieb gefixt:
+- Deployment-Lücke: `plantdiary.service` wurde ursprünglich nie auf die aktive Systemd-Unit synchronisiert (nur die Nginx-Config war im Runbook enthalten) — Schritt ergänzt.
+- „Per Foto identifizierte Pflanze ließ sich nicht hinzufügen": Wenn OpenPlantbook die von PlantNet erkannte Art nicht kennt, gab es keinen Weg mehr, sie trotzdem anzulegen. Fix: direkter „+ Diese Pflanze hinzufügen"-Button direkt nach der Fotoerkennung, unabhängig vom OpenPlantbook-Suchergebnis.
+
+---
+
+## Sicherheit – aktueller Stand
+
+- **PlantNet-API-Key:** ✅ erneuert (bestätigt).
+- **Interner `API_KEY`:** Status unklar/ungeprüft — ob der ursprünglich in der Git-History sichtbare Wert inzwischen durch einen neuen ersetzt wurde oder noch derselbe ist, lässt sich von hier aus nicht feststellen. Empfehlung: einmal in `/etc/plantdiary.env` auf dem Server nachsehen und bei Bedarf rotieren.
+
+## Offene Punkte
+
+- Bestätigen, ob das Home-Bildschirm-Icon auf dem iPad nach den PWA-Nachbesserungen korrekt angezeigt wird (siehe Abschnitt 5).
+- Interner `API_KEY` ggf. rotieren (siehe „Sicherheit" oben).
