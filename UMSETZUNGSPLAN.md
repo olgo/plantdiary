@@ -10,7 +10,7 @@ Dieses Dokument fasste ursprünglich die Ideen aus der gemeinsamen Planungsrunde
 - Arten-ID lief bereits über PlantNet (Cloud-API), Pflegewerte kamen von Open Plantbook.
 - Push-Gieß-Erinnerungen liefen über einen täglichen systemd-Timer (`notify.py`), der `plants.last_watered` auslas.
 - Repo wurde neu unter Versionskontrolle gebracht; ein zuvor versehentlich committeter API-Key wurde aus der Git-History entfernt (Force-Push).
-- **Sicherheits-Update:** Der PlantNet-API-Key wurde zwischenzeitlich erneuert (bestätigt). Der Status des internen `API_KEY` ist unklar — das lässt sich von hier aus nicht prüfen, sollte bei Gelegenheit einmal gegengecheckt werden (siehe Abschnitt „Sicherheit" unten).
+- **Sicherheits-Update:** Alle betroffenen Keys (PlantNet-API-Key und interner `API_KEY`) wurden zwischenzeitlich erneuert (bestätigt).
 
 ## Bewusst verworfene/geänderte Ideen aus der ursprünglichen KI-Architektur-Doku
 
@@ -129,9 +129,8 @@ Zusätzlich im laufenden Betrieb gefixt:
 ## Sicherheit – aktueller Stand
 
 - **PlantNet-API-Key:** ✅ erneuert (bestätigt).
-- **Interner `API_KEY`:** Status unklar/ungeprüft — ob der ursprünglich in der Git-History sichtbare Wert inzwischen durch einen neuen ersetzt wurde oder noch derselbe ist, lässt sich von hier aus nicht feststellen. Empfehlung: einmal in `/etc/plantdiary.env` auf dem Server nachsehen und bei Bedarf rotieren.
+- **Interner `API_KEY`:** ✅ erneuert (bestätigt).
 
 ## Offene Punkte
 
 - Bestätigen, ob das Home-Bildschirm-Icon auf dem iPad nach den PWA-Nachbesserungen korrekt angezeigt wird (siehe Abschnitt 5).
-- Interner `API_KEY` ggf. rotieren (siehe „Sicherheit" oben).
