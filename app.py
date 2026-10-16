@@ -13,6 +13,12 @@ from google.genai import types as genai_types
 from google.genai import errors as genai_errors
 from datetime import datetime, timezone
 from PIL import Image, ImageOps
+from pillow_heif import register_heif_opener
+
+# Registriert HEIC/HEIF (Standardformat von iPhone/iPad-Kamera) als von
+# PIL.Image.open() lesbares Format - ohne das schlagen Uploads von Fotos
+# fehl, die nicht erst in JPEG/PNG konvertiert wurden.
+register_heif_opener()
 
 app = Flask(__name__)
 CORS(app, origins=["https://plantdiary.olga-allerdings.de"])
