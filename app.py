@@ -356,9 +356,14 @@ def get_images(plant_id):
 @app.route("/api/plants/<plant_id>/images", methods=["POST"])
 def upload_image(plant_id):
     if "image" not in request.files:
+        app.logger.warning("Image upload for plant %s: no 'image' field in request.files", plant_id)
         return jsonify({"error": "No file"}), 400
     file = request.files["image"]
     if not file.content_type or not file.content_type.startswith("image/"):
+        app.logger.warning(
+            "Image upload for plant %s rejected: content_type=%r filename=%r",
+            plant_id, file.content_type, file.filename
+        )
         return jsonify({"error": "Not an image"}), 400
 
     try:
@@ -380,7 +385,11 @@ def upload_image(plant_id):
             img = img.resize((1200, int(img.height * ratio)), Image.LANCZOS)
         filename = f"{plant_id}_{uuid.uuid4().hex}.jpg"
         img.save(os.path.join(IMAGES_DIR, filename), "JPEG", quality=80, optimize=True)
-    except Exception:
+    except Exception as e:
+        app.logger.warning(
+            "Image upload for plant %s failed to decode: content_type=%r filename=%r error=%s: %s",
+            plant_id, file.content_type, file.filename, type(e).__name__, e
+        )
         return jsonify({"error": "Invalid image"}), 400
 
     now = taken_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
