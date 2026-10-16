@@ -5,6 +5,7 @@ import os
 import json
 import uuid
 import base64
+import io
 import time
 import requests as http
 import urllib.parse
@@ -358,6 +359,23 @@ def get_images(plant_id):
     return jsonify([dict(r) for r in rows])
 
 
+def downscale_to_jpeg_bytes(img, max_width=1200, quality=80):
+    """Shrink to at most max_width wide and re-encode as JPEG bytes. Used for
+    both gallery uploads and chat images - the chat endpoint re-sends the
+    whole conversation history (including every image already shared)
+    base64-encoded on every turn, so keeping each image small is what keeps
+    that from blowing past the request-size limit after just a couple of
+    photos."""
+    img = ImageOps.exif_transpose(img)
+    img = img.convert("RGB")
+    if img.width > max_width:
+        ratio = max_width / img.width
+        img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
+
+
 # ── POST upload image ──────────────────────────────────────────────────────────
 @app.route("/api/plants/<plant_id>/images", methods=["POST"])
 def upload_image(plant_id):
@@ -384,13 +402,10 @@ def upload_image(plant_id):
                                .strftime("%Y-%m-%dT%H:%M:%S.000Z")
         except Exception:
             pass
-        img = ImageOps.exif_transpose(img)
-        img = img.convert("RGB")
-        if img.width > 1200:
-            ratio = 1200 / img.width
-            img = img.resize((1200, int(img.height * ratio)), Image.LANCZOS)
+        jpeg_bytes = downscale_to_jpeg_bytes(img)
         filename = f"{plant_id}_{uuid.uuid4().hex}.jpg"
-        img.save(os.path.join(IMAGES_DIR, filename), "JPEG", quality=80, optimize=True)
+        with open(os.path.join(IMAGES_DIR, filename), "wb") as f:
+            f.write(jpeg_bytes)
     except Exception as e:
         app.logger.warning(
             "Image upload for plant %s failed to decode: content_type=%r filename=%r error=%s: %s",
@@ -833,12 +848,20 @@ def plant_chat(plant_id):
     image_file = request.files.get("image")
     user_content = []
     if image_file and image_file.content_type and image_file.content_type.startswith("image/"):
+        try:
+            jpeg_bytes = downscale_to_jpeg_bytes(Image.open(image_file.stream))
+        except Exception as e:
+            app.logger.warning(
+                "Chat image for plant %s failed to decode: content_type=%r filename=%r error=%s: %s",
+                plant_id, image_file.content_type, image_file.filename, type(e).__name__, e
+            )
+            return jsonify({"error": "Bild konnte nicht gelesen werden"}), 400
         user_content.append({
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": image_file.content_type,
-                "data": base64.standard_b64encode(image_file.read()).decode()
+                "media_type": "image/jpeg",
+                "data": base64.standard_b64encode(jpeg_bytes).decode()
             }
         })
     if message:
