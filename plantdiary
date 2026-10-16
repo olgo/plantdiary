@@ -19,6 +19,27 @@ server {
         add_header Cache-Control "public";
     }
 
+    # PWA-Assets ohne Basic Auth erreichbar machen: iOS/Safari ruft das
+    # Home-Bildschirm-Icon (und ggf. Manifest/Service-Worker) beim "Zum
+    # Home-Bildschirm hinzufuegen" intern ab, ohne dabei zwingend die
+    # Basic-Auth-Zugangsdaten mitzuschicken - mit Auth dahinter bekam iOS
+    # dafuer ein 401 und zeigte statt des Icons nur einen Platzhalter.
+    # Keine sensiblen Inhalte, daher unproblematisch oeffentlich.
+    location /icons/ {
+        auth_basic off;
+        root /var/www/plantdiary;
+        expires 30d;
+        add_header Cache-Control "public";
+    }
+
+    location = /manifest.json {
+        auth_basic off;
+    }
+
+    location = /sw.js {
+        auth_basic off;
+    }
+
     location /plants {
     proxy_pass http://127.0.0.1:5000/api/plants;
     proxy_set_header Host $host;
